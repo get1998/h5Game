@@ -29,7 +29,7 @@ function createInitialDongfuState(): DongfuState {
 }
 
 /**
- * 洞府与闭关状态
+ * 洞府与修炼状态
  */
 export const useDongfuStore = defineStore('dongfu', {
   state: (): DongfuState => createInitialDongfuState(),
@@ -38,13 +38,13 @@ export const useDongfuStore = defineStore('dongfu', {
     dongfuDisplay(state) {
       return buildDongfuDisplay(state.dongfu)
     },
-    /** 是否闭关中 */
+    /** 是否修炼中 */
     isCultivating(state): boolean {
       return state.idle.isRunning
     },
-    /** 闭关状态文案 */
+    /** 修炼状态文案 */
     idleStatusText(): string {
-      return this.isCultivating ? '闭关中' : '未闭关'
+      return this.isCultivating ? '修炼中' : '未修炼'
     },
   },
   actions: {

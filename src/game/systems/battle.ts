@@ -1,15 +1,11 @@
-import {
-  calcFinalDamage,
-  calcHitRate,
-  rollCrit,
-  rollHit,
-} from '@/game/formulas/damage'
 import { calcGongfaExpGain } from '@/game/formulas/gongfa-exp'
 import { calcSkillProficiencyGain } from '@/game/formulas/skill-proficiency'
 import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
 import { getSkillById } from '@/game/models/skill'
-import type { Monster } from '@/game/models/monster'
+import { getMonsterAttackElement, type Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
+import { appendElementHint, resolveAttack } from '@/game/systems/combat-resolve'
+import { createBattleContext } from '@/game/systems/combat-context'
 import {
   executePlayerAttack,
   type BattleSkillState,
@@ -91,6 +87,10 @@ export interface BattleRoundResult {
 }
 
 export type { BattleSkillState } from '@/game/systems/skill-combat'
+export type { BattleContext } from '@/game/systems/combat-context'
+export type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+export { buildCombatSnapshot } from '@/game/formulas/combat-snapshot'
+export { createBattleContext } from '@/game/systems/combat-context'
 export {
   createBattleSkillState,
   resetBattleSkillState,
@@ -117,12 +117,13 @@ export function runBattleRound(
   gongfa: Gongfa,
   skillState: BattleSkillState,
 ): BattleRoundResult {
+  const ctx = createBattleContext(player, monster, gongfa, skillState)
   const logs: BattleLogEntry[] = []
   let playerHp = player.combat.hp
   let monsterHp = monster.combat.hp
 
   const playerAttack = executePlayerAttack(
-    player,
+    ctx.snapshot,
     monster,
     gongfa,
     skillState,
@@ -136,6 +137,7 @@ export function runBattleRound(
     const proficiencyGain = calcSkillProficiencyGain({
       playerRealm: player.realm,
       monsterRealm: monster.realm,
+      monsterTier: monster.tier,
     })
     if (proficiencyGain > 0) {
       const castSkill = getSkillById(playerAttack.castSkillId)
@@ -146,7 +148,7 @@ export function runBattleRound(
       logs.push(
         createLog(
           `「${castSkill?.name ?? playerAttack.castSkillId}」熟练度 +${proficiencyGain}。`,
-          'system',
+          'skill',
         ),
       )
     }
@@ -155,6 +157,7 @@ export function runBattleRound(
   if (monsterHp <= 0) {
     const gongfaExpGain = calcGongfaExpGain({
       monsterRealm: monster.realm,
+      monsterTier: monster.tier,
       spiritRootType: player.spiritRootType,
       spiritRootElements: player.spiritRootElements,
       gongfaElement: getGongfaPrimaryElement(gongfa),
@@ -175,27 +178,36 @@ export function runBattleRound(
     }
   }
 
-  // 怪物反击
-  const monsterHitRate = calcHitRate(
-    monster.combat.hitRate,
-    monster.combat.speed,
-    player.combat.speed,
-  )
-  if (rollHit(monsterHitRate)) {
-    const isCrit = rollCrit(monster.combat.critRate)
-    const damage = calcFinalDamage({
+  const monsterAttackElement = getMonsterAttackElement(monster)
+  const result = resolveAttack({
+    source: 'monster',
+    attacker: {
       attack: monster.combat.attack,
-      isCrit,
+      critRate: monster.combat.critRate,
       critDamage: monster.combat.critDamage,
-      targetDefense: player.combat.defense + gongfa.defenseBonus,
-    })
-    playerHp = Math.max(0, playerHp - damage)
+      penetration: monster.combat.penetration,
+      hitRate: monster.combat.hitRate,
+      speed: monster.combat.speed,
+    },
+    defender: {
+      defense: ctx.snapshot.defense,
+      speed: ctx.snapshot.speed,
+      element: ctx.snapshot.defenseElement,
+    },
+    attackElement: monsterAttackElement,
+  })
+
+  if (result.hit) {
+    playerHp = Math.max(0, playerHp - result.damage)
     logs.push(
       createLog(
-        isCrit
-          ? `${monster.name} 对你造成暴击 ${damage} 点伤害！`
-          : `${monster.name} 对你造成 ${damage} 点伤害。`,
-        isCrit ? 'crit' : 'damage',
+        appendElementHint(
+          result.isCrit
+            ? `${monster.name} 对你造成暴击 ${result.damage} 点伤害！`
+            : `${monster.name} 对你造成 ${result.damage} 点伤害。`,
+          result.elementHint,
+        ),
+        result.isCrit ? 'crit' : 'damage',
       ),
     )
   } else {

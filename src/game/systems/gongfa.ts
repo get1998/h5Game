@@ -1,5 +1,5 @@
 import { calcExpToNextLevel } from '@/game/formulas/gongfa-exp'
-import type { Gongfa } from '@/game/models/gongfa'
+import { syncGongfaLevelBonuses, type Gongfa } from '@/game/models/gongfa'
 
 export interface GongfaLevelUpResult {
   leveledUp: boolean
@@ -37,6 +37,9 @@ export function addGongfaExp(gongfa: Gongfa, expGain: number): GongfaLevelUpResu
   }
 
   Object.assign(gongfa, { level, exp, expToNext })
+  if (leveledUp) {
+    syncGongfaLevelBonuses(gongfa)
+  }
 
   return {
     leveledUp,

@@ -1,5 +1,9 @@
 import { getRealmDiff } from '@/game/constants/realm'
 import {
+  getMonsterTierRewardMultiplier,
+  type MonsterTier,
+} from '@/game/models/monster'
+import {
   SKILL_PROFICIENCY_BASE_GAIN,
   type SkillLevel,
 } from '@/game/models/skill'
@@ -10,6 +14,8 @@ export interface SkillProficiencyGainInput {
   playerRealm: RealmStage
   /** 怪物境界 */
   monsterRealm: RealmStage
+  /** 怪物品阶 */
+  monsterTier: MonsterTier
 }
 
 /**
@@ -46,7 +52,8 @@ export function calcSkillProficiencyGain(input: SkillProficiencyGainInput): numb
   )
   if (multiplier <= 0) return 0
 
-  const raw = SKILL_PROFICIENCY_BASE_GAIN * multiplier
+  const tierMultiplier = getMonsterTierRewardMultiplier(input.monsterTier)
+  const raw = SKILL_PROFICIENCY_BASE_GAIN * multiplier * tierMultiplier
   const floored = Math.floor(raw)
   if (floored > 0) return floored
   return raw > 0 ? 1 : 0

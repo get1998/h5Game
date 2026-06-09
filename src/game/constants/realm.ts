@@ -58,61 +58,140 @@ function buildRealmOrder(): RealmStage[] {
   return order
 }
 
-/** 境界顺序（炼气 1~15 层，其后各境前/中/后/大圆满） */
+/** 各境界顺序（炼气 1~15 层，其后各境前/中/后/大圆满） */
 export const REALM_ORDER: RealmStage[] = buildRealmOrder()
 
-/** 各大大境界基础寿元（年） */
-export const REALM_MAJOR_LIFESPAN: Record<RealmMajor, number> = {
-  炼气: 100,
-  筑基: 200,
-  金丹: 500,
-  元婴: 1000,
-  化神: 3000,
+/** 小境界完整配置（修为 / 寿元 / 核心战斗属性） */
+interface RealmStageData {
+  breakthroughXiuwei: number
+  lifespan: number
+  maxHp: number
+  maxMp: number
+  attack: number
+  defense: number
+  speed: number
+  shenshi: number
+  bodyStrength: number
 }
-
-/** 各境界基础寿元（年，同一大境界内一致） */
-export const REALM_LIFESPAN: Record<RealmStage, number> = Object.fromEntries(
-  REALM_ORDER.map((realm) => [realm, REALM_MAJOR_LIFESPAN[getRealmMajor(realm)]]),
-) as Record<RealmStage, number>
 
 /**
- * 各大境界内累计修为增量（对齐 docs/game_introduce.md 第六节）
- * 炼气 0→1000、筑基 +4000、金丹 +15000、元婴 +80000、化神 +200000
+ * 炼气 1~15 层（累计修为约 3000；寿元 100→115）
+ * 战斗属性 ×2.5、突破修为 ×3，与凡品功法等级等比成长对齐
  */
-const REALM_MAJOR_XIUWEI_TOTAL: Record<RealmMajor, number> = {
-  炼气: 1000,
-  筑基: 4000,
-  金丹: 15000,
-  元婴: 80000,
-  化神: 200000,
+const QI_REFINING_STAGE_DATA: readonly RealmStageData[] = [
+  { breakthroughXiuwei: 108, lifespan: 100, maxHp: 250, maxMp: 125, attack: 25, defense: 13, speed: 25, shenshi: 1, bodyStrength: 1 },
+  { breakthroughXiuwei: 123, lifespan: 101, maxHp: 285, maxMp: 143, attack: 28, defense: 15, speed: 28, shenshi: 2, bodyStrength: 2 },
+  { breakthroughXiuwei: 138, lifespan: 102, maxHp: 323, maxMp: 160, attack: 30, defense: 18, speed: 33, shenshi: 3, bodyStrength: 3 },
+  { breakthroughXiuwei: 153, lifespan: 103, maxHp: 358, maxMp: 178, attack: 33, defense: 20, speed: 35, shenshi: 4, bodyStrength: 4 },
+  { breakthroughXiuwei: 162, lifespan: 104, maxHp: 393, maxMp: 198, attack: 35, defense: 23, speed: 40, shenshi: 5, bodyStrength: 5 },
+  { breakthroughXiuwei: 174, lifespan: 105, maxHp: 428, maxMp: 215, attack: 38, defense: 25, speed: 43, shenshi: 6, bodyStrength: 6 },
+  { breakthroughXiuwei: 186, lifespan: 106, maxHp: 465, maxMp: 233, attack: 40, defense: 28, speed: 48, shenshi: 7, bodyStrength: 7 },
+  { breakthroughXiuwei: 198, lifespan: 107, maxHp: 500, maxMp: 250, attack: 43, defense: 30, speed: 50, shenshi: 8, bodyStrength: 8 },
+  { breakthroughXiuwei: 210, lifespan: 108, maxHp: 535, maxMp: 268, attack: 45, defense: 33, speed: 53, shenshi: 9, bodyStrength: 9 },
+  { breakthroughXiuwei: 222, lifespan: 109, maxHp: 573, maxMp: 285, attack: 48, defense: 33, speed: 58, shenshi: 10, bodyStrength: 10 },
+  { breakthroughXiuwei: 234, lifespan: 110, maxHp: 608, maxMp: 303, attack: 53, defense: 35, speed: 60, shenshi: 11, bodyStrength: 11 },
+  { breakthroughXiuwei: 246, lifespan: 111, maxHp: 643, maxMp: 323, attack: 55, defense: 38, speed: 65, shenshi: 12, bodyStrength: 12 },
+  { breakthroughXiuwei: 258, lifespan: 112, maxHp: 678, maxMp: 340, attack: 58, defense: 40, speed: 68, shenshi: 13, bodyStrength: 13 },
+  { breakthroughXiuwei: 273, lifespan: 113, maxHp: 715, maxMp: 358, attack: 63, defense: 43, speed: 73, shenshi: 14, bodyStrength: 14 },
+  { breakthroughXiuwei: 315, lifespan: 115, maxHp: 750, maxMp: 375, attack: 75, defense: 45, speed: 75, shenshi: 15, bodyStrength: 15 },
+]
+
+/**
+ * 筑基各小境（累计修为约 +12000；寿元 200→300）
+ */
+const FOUNDATION_STAGE_DATA: readonly RealmStageData[] = [
+  { breakthroughXiuwei: 2400, lifespan: 200, maxHp: 1250, maxMp: 750, attack: 125, defense: 75, speed: 100, shenshi: 20, bodyStrength: 20 },
+  { breakthroughXiuwei: 2700, lifespan: 230, maxHp: 1668, maxMp: 1000, attack: 168, defense: 100, speed: 133, shenshi: 27, bodyStrength: 27 },
+  { breakthroughXiuwei: 3300, lifespan: 260, maxHp: 2083, maxMp: 1250, attack: 208, defense: 125, speed: 168, shenshi: 33, bodyStrength: 33 },
+  { breakthroughXiuwei: 3600, lifespan: 300, maxHp: 2500, maxMp: 1500, attack: 250, defense: 150, speed: 200, shenshi: 40, bodyStrength: 40 },
+]
+
+/**
+ * 金丹各小境（累计修为约 +45000；寿元 500→860）
+ */
+const GOLDEN_CORE_STAGE_DATA: readonly RealmStageData[] = [
+  { breakthroughXiuwei: 9000, lifespan: 500, maxHp: 5000, maxMp: 2500, attack: 375, defense: 250, speed: 200, shenshi: 50, bodyStrength: 50 },
+  { breakthroughXiuwei: 10500, lifespan: 600, maxHp: 6668, maxMp: 3333, attack: 500, defense: 333, speed: 258, shenshi: 60, bodyStrength: 60 },
+  { breakthroughXiuwei: 12000, lifespan: 720, maxHp: 8333, maxMp: 4168, attack: 625, defense: 418, speed: 318, shenshi: 70, bodyStrength: 70 },
+  { breakthroughXiuwei: 13500, lifespan: 860, maxHp: 10000, maxMp: 5000, attack: 750, defense: 500, speed: 375, shenshi: 80, bodyStrength: 80 },
+]
+
+/**
+ * 元婴各小境（累计修为约 +240000；寿元 1000→2200）
+ */
+const NASCENT_SOUL_STAGE_DATA: readonly RealmStageData[] = [
+  { breakthroughXiuwei: 45000, lifespan: 1000, maxHp: 12500, maxMp: 7500, attack: 1000, defense: 625, speed: 375, shenshi: 100, bodyStrength: 100 },
+  { breakthroughXiuwei: 54000, lifespan: 1300, maxHp: 16668, maxMp: 10000, attack: 1333, defense: 833, speed: 458, shenshi: 117, bodyStrength: 117 },
+  { breakthroughXiuwei: 63000, lifespan: 1700, maxHp: 20833, maxMp: 12500, attack: 1668, defense: 1043, speed: 543, shenshi: 133, bodyStrength: 133 },
+  { breakthroughXiuwei: 78000, lifespan: 2200, maxHp: 25000, maxMp: 15000, attack: 2000, defense: 1250, speed: 625, shenshi: 150, bodyStrength: 150 },
+]
+
+/**
+ * 化神各小境（累计修为约 +600000；寿元 3000→6000）
+ * 化神大圆满为当前版本顶境，突破所需修为设为极大值
+ */
+const SPIRIT_SEVERANCE_STAGE_DATA: readonly RealmStageData[] = [
+  { breakthroughXiuwei: 120000, lifespan: 3000, maxHp: 30000, maxMp: 17500, attack: 2250, defense: 1375, speed: 650, shenshi: 180, bodyStrength: 180 },
+  { breakthroughXiuwei: 135000, lifespan: 3600, maxHp: 36668, maxMp: 21668, attack: 2750, defense: 1668, speed: 725, shenshi: 203, bodyStrength: 203 },
+  { breakthroughXiuwei: 150000, lifespan: 4400, maxHp: 43333, maxMp: 25833, attack: 3250, defense: 1958, speed: 800, shenshi: 227, bodyStrength: 227 },
+  { breakthroughXiuwei: 195000, lifespan: 5400, maxHp: 50000, maxMp: 30000, attack: 3750, defense: 2250, speed: 875, shenshi: 250, bodyStrength: 250 },
+]
+
+const MAJOR_STAGE_DATA: Record<
+  Exclude<RealmMajor, '炼气'>,
+  readonly RealmStageData[]
+> = {
+  筑基: FOUNDATION_STAGE_DATA,
+  金丹: GOLDEN_CORE_STAGE_DATA,
+  元婴: NASCENT_SOUL_STAGE_DATA,
+  化神: SPIRIT_SEVERANCE_STAGE_DATA,
 }
 
-function buildBreakthroughXiuwei(): Record<RealmStage, number> {
-  const result = {} as Record<RealmStage, number>
+/** 化神大圆满突破所需修为（当前版本顶境） */
+const SPIRIT_SEVERANCE_PEAK_XIUWEI = 999999
 
-  for (const major of REALM_MAJORS) {
-    const stages = REALM_ORDER.filter((realm) => getRealmMajor(realm) === major)
-    const total = REALM_MAJOR_XIUWEI_TOTAL[major]
-    const perStage = Math.floor(total / stages.length)
-    let remainder = total - perStage * stages.length
+function buildRealmStageDataMap(): Record<RealmStage, RealmStageData> {
+  const result = {} as Record<RealmStage, RealmStageData>
 
-    stages.forEach((realm, index) => {
-      const isLastInMajor = index === stages.length - 1
-      const isLastOverall = realm === REALM_ORDER[REALM_ORDER.length - 1]
-      if (isLastOverall) {
-        result[realm] = 999999
-        return
-      }
-      const extra = isLastInMajor ? remainder : 0
-      result[realm] = perStage + extra
+  QI_REFINING_LAYERS.forEach((layer, index) => {
+    result[`炼气${layer}`] = QI_REFINING_STAGE_DATA[index]
+  })
+
+  for (const major of REALM_MAJORS.slice(1)) {
+    REALM_SUB_STAGES.forEach((sub, index) => {
+      result[`${major}${sub}` as RealmStage] = MAJOR_STAGE_DATA[major as Exclude<RealmMajor, '炼气'>][index]
     })
+  }
+
+  result['化神大圆满'] = {
+    ...SPIRIT_SEVERANCE_STAGE_DATA[3],
+    breakthroughXiuwei: SPIRIT_SEVERANCE_PEAK_XIUWEI,
+    lifespan: 6000,
   }
 
   return result
 }
 
+const REALM_STAGE_DATA = buildRealmStageDataMap()
+
+/** 各大大境界基础寿元（年，取该境大圆满寿元，供展示/兼容） */
+export const REALM_MAJOR_LIFESPAN: Record<RealmMajor, number> = {
+  炼气: QI_REFINING_STAGE_DATA[QI_REFINING_STAGE_DATA.length - 1].lifespan,
+  筑基: FOUNDATION_STAGE_DATA[FOUNDATION_STAGE_DATA.length - 1].lifespan,
+  金丹: GOLDEN_CORE_STAGE_DATA[GOLDEN_CORE_STAGE_DATA.length - 1].lifespan,
+  元婴: NASCENT_SOUL_STAGE_DATA[NASCENT_SOUL_STAGE_DATA.length - 1].lifespan,
+  化神: 6000,
+}
+
+/** 各小境界寿元（年） */
+export const REALM_LIFESPAN: Record<RealmStage, number> = Object.fromEntries(
+  REALM_ORDER.map((realm) => [realm, REALM_STAGE_DATA[realm].lifespan]),
+) as Record<RealmStage, number>
+
 /** 各小境界突破所需修为 */
-export const REALM_BREAKTHROUGH_XIUWEI: Record<RealmStage, number> = buildBreakthroughXiuwei()
+export const REALM_BREAKTHROUGH_XIUWEI: Record<RealmStage, number> = Object.fromEntries(
+  REALM_ORDER.map((realm) => [realm, REALM_STAGE_DATA[realm].breakthroughXiuwei]),
+) as Record<RealmStage, number>
 
 /**
  * 境界闭关基础参数（洞府修为计算核心）
@@ -130,8 +209,8 @@ const QI_REFINING_CULTIVATION_ANCHOR: {
   start: RealmCultivationBase
   end: RealmCultivationBase
 } = {
-  start: { absorptionRate: 1.6, conversionRate: 0.48 },
-  end: { absorptionRate: 2.4, conversionRate: 0.52 },
+  start: { absorptionRate: 4, conversionRate: 0.46 },
+  end: { absorptionRate: 6, conversionRate: 0.54 },
 }
 
 /** 筑基及以上各境前期 ~ 大圆满闭关参数区间 */
@@ -140,20 +219,20 @@ const MAJOR_CULTIVATION_ANCHORS: Record<
   { start: RealmCultivationBase; end: RealmCultivationBase }
 > = {
   筑基: {
-    start: { absorptionRate: 3.2, conversionRate: 0.48 },
-    end: { absorptionRate: 4.8, conversionRate: 0.52 },
+    start: { absorptionRate: 8, conversionRate: 0.46 },
+    end: { absorptionRate: 12, conversionRate: 0.54 },
   },
   金丹: {
-    start: { absorptionRate: 8, conversionRate: 0.48 },
-    end: { absorptionRate: 12, conversionRate: 0.52 },
+    start: { absorptionRate: 20, conversionRate: 0.44 },
+    end: { absorptionRate: 30, conversionRate: 0.56 },
   },
   元婴: {
-    start: { absorptionRate: 19.2, conversionRate: 0.48 },
-    end: { absorptionRate: 28.8, conversionRate: 0.52 },
+    start: { absorptionRate: 48, conversionRate: 0.42 },
+    end: { absorptionRate: 72, conversionRate: 0.58 },
   },
   化神: {
-    start: { absorptionRate: 48, conversionRate: 0.48 },
-    end: { absorptionRate: 72, conversionRate: 0.52 },
+    start: { absorptionRate: 120, conversionRate: 0.4 },
+    end: { absorptionRate: 180, conversionRate: 0.6 },
   },
 }
 
@@ -215,43 +294,6 @@ export interface RealmBaseStats {
   bodyStrength: number
 }
 
-/** 核心属性锚点（参考 docs/game_introduce.md 第四节） */
-interface RealmCoreAnchor {
-  maxHp: number
-  maxMp: number
-  attack: number
-  defense: number
-  speed: number
-  shenshi: number
-  bodyStrength: number
-}
-
-/** 炼气 1 层 ~ 15 层属性区间 */
-const QI_REFINING_ANCHOR: { start: RealmCoreAnchor; end: RealmCoreAnchor } = {
-  start: { maxHp: 100, maxMp: 50, attack: 10, defense: 5, speed: 10, shenshi: 1, bodyStrength: 1 },
-  end: { maxHp: 300, maxMp: 150, attack: 30, defense: 15, speed: 30, shenshi: 15, bodyStrength: 15 },
-}
-
-/** 筑基及以上各境前期 ~ 大圆满属性区间 */
-const MAJOR_SUB_ANCHORS: Record<Exclude<RealmMajor, '炼气'>, { start: RealmCoreAnchor; end: RealmCoreAnchor }> = {
-  筑基: {
-    start: { maxHp: 500, maxMp: 300, attack: 50, defense: 30, speed: 40, shenshi: 20, bodyStrength: 20 },
-    end: { maxHp: 1000, maxMp: 600, attack: 100, defense: 60, speed: 80, shenshi: 40, bodyStrength: 40 },
-  },
-  金丹: {
-    start: { maxHp: 2000, maxMp: 1000, attack: 150, defense: 100, speed: 80, shenshi: 50, bodyStrength: 50 },
-    end: { maxHp: 4000, maxMp: 2000, attack: 300, defense: 200, speed: 150, shenshi: 80, bodyStrength: 80 },
-  },
-  元婴: {
-    start: { maxHp: 5000, maxMp: 3000, attack: 400, defense: 250, speed: 150, shenshi: 100, bodyStrength: 100 },
-    end: { maxHp: 10000, maxMp: 6000, attack: 800, defense: 500, speed: 250, shenshi: 150, bodyStrength: 150 },
-  },
-  化神: {
-    start: { maxHp: 12000, maxMp: 7000, attack: 900, defense: 550, speed: 260, shenshi: 180, bodyStrength: 180 },
-    end: { maxHp: 20000, maxMp: 12000, attack: 1500, defense: 900, speed: 350, shenshi: 250, bodyStrength: 250 },
-  },
-}
-
 /** 战斗概率属性随境界全程渐变 */
 const COMBAT_RATE_ANCHOR = {
   start: { critRate: 0.05, critDamage: 1.5, hitRate: 0.9, dodgeRate: 0.05, penetration: 0 },
@@ -262,40 +304,23 @@ function lerpValue(start: number, end: number, t: number): number {
   return start + (end - start) * t
 }
 
-function lerpCoreAnchor(start: RealmCoreAnchor, end: RealmCoreAnchor, t: number): RealmCoreAnchor {
-  return {
-    maxHp: Math.floor(lerpValue(start.maxHp, end.maxHp, t)),
-    maxMp: Math.floor(lerpValue(start.maxMp, end.maxMp, t)),
-    attack: Math.floor(lerpValue(start.attack, end.attack, t)),
-    defense: Math.floor(lerpValue(start.defense, end.defense, t)),
-    speed: Math.floor(lerpValue(start.speed, end.speed, t)),
-    shenshi: Math.floor(lerpValue(start.shenshi, end.shenshi, t)),
-    bodyStrength: Math.floor(lerpValue(start.bodyStrength, end.bodyStrength, t)),
-  }
-}
-
 function buildRealmBaseStats(): Record<RealmStage, RealmBaseStats> {
   const result = {} as Record<RealmStage, RealmBaseStats>
   const maxIndex = REALM_ORDER.length - 1
 
   for (let index = 0; index < REALM_ORDER.length; index++) {
     const realm = REALM_ORDER[index]
+    const data = REALM_STAGE_DATA[realm]
     const rateT = maxIndex > 0 ? index / maxIndex : 0
-    let core: RealmCoreAnchor
-
-    if (realm.startsWith('炼气')) {
-      const layerIndex = QI_REFINING_LAYERS.findIndex((layer) => realm === `炼气${layer}`)
-      const t = layerIndex / (QI_REFINING_LAYERS.length - 1)
-      core = lerpCoreAnchor(QI_REFINING_ANCHOR.start, QI_REFINING_ANCHOR.end, t)
-    } else {
-      const major = getRealmMajor(realm) as Exclude<RealmMajor, '炼气'>
-      const subIndex = REALM_SUB_STAGES.findIndex((sub) => realm === `${major}${sub}`)
-      const t = subIndex / (REALM_SUB_STAGES.length - 1)
-      core = lerpCoreAnchor(MAJOR_SUB_ANCHORS[major].start, MAJOR_SUB_ANCHORS[major].end, t)
-    }
 
     result[realm] = {
-      ...core,
+      maxHp: data.maxHp,
+      maxMp: data.maxMp,
+      attack: data.attack,
+      defense: data.defense,
+      speed: data.speed,
+      shenshi: data.shenshi,
+      bodyStrength: data.bodyStrength,
       critRate: Number(lerpValue(COMBAT_RATE_ANCHOR.start.critRate, COMBAT_RATE_ANCHOR.end.critRate, rateT).toFixed(3)),
       critDamage: Number(lerpValue(COMBAT_RATE_ANCHOR.start.critDamage, COMBAT_RATE_ANCHOR.end.critDamage, rateT).toFixed(2)),
       hitRate: Number(lerpValue(COMBAT_RATE_ANCHOR.start.hitRate, COMBAT_RATE_ANCHOR.end.hitRate, rateT).toFixed(3)),
@@ -343,6 +368,13 @@ export function normalizeRealm(realm: string): RealmStage {
 }
 
 /**
+ * 获取境界寿元上限
+ */
+export function getRealmLifespan(realm: RealmStage): number {
+  return REALM_LIFESPAN[realm]
+}
+
+/**
  * 获取境界基础属性
  */
 export function getRealmBaseStats(realm: RealmStage): RealmBaseStats {
@@ -364,6 +396,18 @@ export function getRealmIndex(realm: RealmStage): number {
 }
 
 /**
+ * 与境界等比的推荐功法等级（凡品校准基准：炼气一层≈1级，化神大圆满≈满级）
+ * @param realm 当前境界
+ * @param maxLevel 功法最高等级，默认 10
+ */
+export function getRealmProportionalGongfaLevel(realm: RealmStage, maxLevel = 10): number {
+  const realmIndex = getRealmIndex(realm)
+  if (realmIndex < 0) return 1
+  const totalStages = REALM_ORDER.length
+  return Math.max(1, Math.min(maxLevel, Math.round((realmIndex + 1) * maxLevel / totalStages)))
+}
+
+/**
  * 计算怪物境界相对玩家境界的差值（怪物索引 − 玩家索引）
  * - 正值：怪物境界更高
  * - 0：同境
@@ -378,4 +422,74 @@ export function getRealmDiff(playerRealm: RealmStage, monsterRealm: RealmStage):
  */
 export function isRealmAtLeast(current: RealmStage, required: RealmStage): boolean {
   return getRealmIndex(current) >= getRealmIndex(required)
+}
+
+/**
+ * 当前境界突破所需修为
+ */
+export function getRealmBreakthroughXiuwei(realm: RealmStage): number {
+  return REALM_BREAKTHROUGH_XIUWEI[realm]
+}
+
+/**
+ * 当前境界还可积累的修为余量
+ */
+export function getRealmXiuweiRoom(player: { realm: RealmStage; xiuwei: number }): number {
+  return Math.max(0, REALM_BREAKTHROUGH_XIUWEI[player.realm] - player.xiuwei)
+}
+
+/**
+ * 当前境界修为是否已满（达到突破所需）
+ */
+export function isRealmXiuweiFull(player: { realm: RealmStage; xiuwei: number }): boolean {
+  return getRealmXiuweiRoom(player) <= 0
+}
+
+/**
+ * 在 [minRealm, maxRealm] 闭区间内随机选取一个境界（含两端，均匀分布）
+ */
+export function pickRandomRealmInRange(
+  minRealm: RealmStage,
+  maxRealm: RealmStage,
+): RealmStage {
+  const minIndex = getRealmIndex(minRealm)
+  const maxIndex = getRealmIndex(maxRealm)
+  const low = Math.min(minIndex, maxIndex)
+  const high = Math.max(minIndex, maxIndex)
+  const index = low + Math.floor(Math.random() * (high - low + 1))
+  return REALM_ORDER[index]
+}
+
+/**
+ * 在 [minRealm, maxRealm] 闭区间内按权重随机选取境界（低境界权重更高）
+ * 权重规则：区间内从低到高依次为 span、span-1、…、1
+ */
+export function pickRandomRealmInRangeWeighted(
+  minRealm: RealmStage,
+  maxRealm: RealmStage,
+): RealmStage {
+  const minIndex = getRealmIndex(minRealm)
+  const maxIndex = getRealmIndex(maxRealm)
+  const low = Math.min(minIndex, maxIndex)
+  const high = Math.max(minIndex, maxIndex)
+  const span = high - low + 1
+
+  if (span <= 1) {
+    return REALM_ORDER[low]
+  }
+
+  let totalWeight = 0
+  for (let i = 0; i < span; i++) {
+    totalWeight += span - i
+  }
+
+  let roll = Math.random() * totalWeight
+  for (let i = 0; i < span; i++) {
+    roll -= span - i
+    if (roll <= 0) {
+      return REALM_ORDER[low + i]
+    }
+  }
+
+  return REALM_ORDER[low]
 }

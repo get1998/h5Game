@@ -101,6 +101,10 @@ onMounted(() => {
   color: $color-primary;
 }
 
+.log-panel__item--skill {
+  color: #c9b8e8;
+}
+
 .log-panel__empty {
   color: $color-text-muted;
   text-align: center;

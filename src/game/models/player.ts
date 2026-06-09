@@ -70,19 +70,30 @@ export interface Player {
 }
 
 /**
- * 将境界基础属性应用到玩家（突破时调用，气血/灵力回满）
+ * 按当前境界常量重算玩家基础属性（读档同步 / 数值表调整后刷新）
+ * @param options.preserveResourceRatio 为 true 时按原气血、灵力比例保留当前值
  */
-export function applyRealmBaseToPlayer(player: Player, realm: RealmStage): void {
-  const base = getRealmBaseStats(realm)
+export function resyncPlayerRealmStats(
+  player: Player,
+  options: { preserveResourceRatio?: boolean } = {},
+): void {
+  const { preserveResourceRatio = false } = options
+  const base = getRealmBaseStats(player.realm)
 
-  player.realm = realm
-  player.lifespan = REALM_LIFESPAN[realm]
+  const hpRatio = preserveResourceRatio && player.combat.maxHp > 0
+    ? player.combat.hp / player.combat.maxHp
+    : 1
+  const mpRatio = preserveResourceRatio && player.combat.maxMp > 0
+    ? player.combat.mp / player.combat.maxMp
+    : 1
+
+  player.lifespan = REALM_LIFESPAN[player.realm]
   player.shenshi = base.shenshi
   player.bodyStrength = base.bodyStrength
   player.combat = {
-    hp: base.maxHp,
+    hp: Math.max(1, Math.min(base.maxHp, Math.floor(base.maxHp * hpRatio))),
     maxHp: base.maxHp,
-    mp: base.maxMp,
+    mp: Math.max(0, Math.min(base.maxMp, Math.floor(base.maxMp * mpRatio))),
     maxMp: base.maxMp,
     attack: base.attack,
     defense: base.defense,
@@ -93,6 +104,14 @@ export function applyRealmBaseToPlayer(player: Player, realm: RealmStage): void 
     dodgeRate: base.dodgeRate,
     penetration: base.penetration,
   }
+}
+
+/**
+ * 将境界基础属性应用到玩家（突破时调用，气血/灵力回满）
+ */
+export function applyRealmBaseToPlayer(player: Player, realm: RealmStage): void {
+  player.realm = realm
+  resyncPlayerRealmStats(player)
 }
 
 /** 创建新角色默认数据 */

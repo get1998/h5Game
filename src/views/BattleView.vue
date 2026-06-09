@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import GameLayout from '@/components/layout/GameLayout.vue'
-import BattleCanvas from '@/components/BattleCanvas/index.vue'
 import LogPanel from '@/components/LogPanel.vue'
 import { TRAINING_MAPS } from '@/game/constants/maps'
 import { useGameStore } from '@/stores/game'
@@ -35,6 +34,7 @@ const battleInfo = computed(() => {
       monsterName: '',
       realm: '',
       monsterKind: '',
+      monsterElement: '',
       tier: '',
       monsterHp: 0,
       monsterMaxHp: 0,
@@ -47,6 +47,7 @@ const battleInfo = computed(() => {
     hasMonster: true,
     monsterName: monster.name,
     monsterKind: monster.kind,
+    monsterElement: monster.element,
     tier: monster.tier,
     hpBarStyle: `width: ${percent}%`,
     monsterHp: monster.combat.hp,
@@ -55,6 +56,13 @@ const battleInfo = computed(() => {
 })
 
 const currentMapName = computed(() => gameStore.currentMap?.name ?? '未选择')
+
+/** 玩家灵力进度条宽度 */
+const playerMpBarStyle = computed(() => {
+  const { mp, maxMp } = playerStore.player.combat
+  const percent = maxMp > 0 ? Math.floor((mp / maxMp) * 100) : 0
+  return `width: ${percent}%`
+})
 
 const exploreButtonText = computed(() =>
   gameStore.isAutoExploring ? '结束历练' : '进入地图',
@@ -66,7 +74,17 @@ const exploreButtonClass = computed(() =>
     : 'game-btn game-btn--primary',
 )
 
-/** 调息、重伤或闭关期间禁止历练操作 */
+/** 战斗过程日志（伤害、闪避、系统等） */
+const combatLogs = computed(() =>
+  gameStore.battleLogs.filter((log) => log.type !== 'skill'),
+)
+
+/** 技能熟练度与等级晋升日志 */
+const skillLogs = computed(() =>
+  gameStore.battleLogs.filter((log) => log.type === 'skill'),
+)
+
+/** 调息、重伤或修炼期间禁止历练操作 */
 const isExploreLocked = computed(() =>
   gameStore.isRecoveryLocked || gameStore.isCultivationLocked,
 )
@@ -119,7 +137,7 @@ function handleToggleExplore() {
       </div>
     </section>
 
-    <BattleCanvas />
+    <!-- <BattleCanvas /> -->
 
     <section class="battle-card game-card">
       <div class="page-section-title">当前历练</div>
@@ -137,6 +155,15 @@ function handleToggleExplore() {
           {{ playerStore.player.combat.hp }} / {{ playerStore.player.combat.maxHp }}
         </span>
       </div>
+      <div class="stat-row">
+        <span class="stat-label">灵力</span>
+        <span class="stat-value">
+          {{ playerStore.player.combat.mp }} / {{ playerStore.player.combat.maxMp }}
+        </span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar__fill progress-bar__fill--mp" :style="playerMpBarStyle" />
+      </div>
 
       <div class="page-section-title battle-enemy-title">当前敌人</div>
       <template v-if="battleInfo.hasMonster">
@@ -147,6 +174,10 @@ function handleToggleExplore() {
         <div class="stat-row">
           <span class="stat-label">境界</span>
           <span class="stat-value">【{{ battleInfo.tier }}】{{ battleInfo.realm }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">五行</span>
+          <span class="stat-value">{{ battleInfo.monsterElement }}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">气血</span>
@@ -171,7 +202,8 @@ function handleToggleExplore() {
     </section>
 
     <section class="battle-log-section">
-      <LogPanel :logs="gameStore.battleLogs" title="战斗日志" />
+      <LogPanel :logs="combatLogs" title="战斗日志" />
+      <LogPanel :logs="skillLogs" title="技能等级" class="battle-skill-log" />
     </section>
   </GameLayout>
 </template>
@@ -290,6 +322,10 @@ function handleToggleExplore() {
   background: $color-danger;
 }
 
+.progress-bar__fill--mp {
+  background: $color-info;
+}
+
 .battle-action-btn {
   width: 100%;
   margin-top: 16px;
@@ -297,5 +333,9 @@ function handleToggleExplore() {
 
 .battle-log-section {
   margin-top: 16px;
+}
+
+.battle-skill-log {
+  margin-top: 12px;
 }
 </style>

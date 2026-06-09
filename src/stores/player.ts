@@ -19,6 +19,10 @@ import {
   formatGameDate,
   type WorldTime,
 } from '@/game/systems/time'
+import {
+  createDefaultMonsterTierPityState,
+  type MonsterTierPityState,
+} from '@/game/models/monster'
 import type { ElementType, SpiritRootType } from '@/game/types'
 import {
   createDefaultGameSave,
@@ -34,6 +38,7 @@ interface PlayerState {
   activeGongfaId: string
   gongfaList: Gongfa[]
   worldTime: WorldTime
+  monsterTierPity: MonsterTierPityState
 }
 
 function createInitialPlayerState(): PlayerState {
@@ -44,6 +49,7 @@ function createInitialPlayerState(): PlayerState {
       activeGongfaId: saved.activeGongfaId,
       gongfaList: saved.gongfaList,
       worldTime: saved.worldTime,
+      monsterTierPity: saved.monsterTierPity ?? createDefaultMonsterTierPityState(),
     }
   }
   const defaults = createDefaultGameSave()
@@ -52,6 +58,7 @@ function createInitialPlayerState(): PlayerState {
     activeGongfaId: defaults.activeGongfaId,
     gongfaList: defaults.gongfaList,
     worldTime: defaults.worldTime,
+    monsterTierPity: defaults.monsterTierPity,
   }
 }
 
@@ -90,6 +97,7 @@ export const usePlayerStore = defineStore('player', {
         worldTime: this.worldTime,
         dongfu: dongfuStore.dongfu,
         idle: dongfuStore.idle,
+        monsterTierPity: this.monsterTierPity,
       }
       persistSave(data)
     },
@@ -249,6 +257,7 @@ export const usePlayerStore = defineStore('player', {
       this.activeGongfaId = starter.id
       this.gongfaList = [starter]
       this.worldTime = createInitialWorldTime()
+      this.monsterTierPity = createDefaultMonsterTierPityState()
       useDongfuStore().resetState()
       this.save()
     },
@@ -260,6 +269,7 @@ export const usePlayerStore = defineStore('player', {
       this.activeGongfaId = starter.id
       this.gongfaList = [starter]
       this.worldTime = createInitialWorldTime()
+      this.monsterTierPity = createDefaultMonsterTierPityState()
       useDongfuStore().resetState()
     },
   },

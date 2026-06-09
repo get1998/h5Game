@@ -1,3 +1,7 @@
+import {
+  GONGFA_QUALITY_LEVEL_GROWTH,
+  type GongfaQualityPerLevelGrowth,
+} from '@/game/constants/gongfa'
 import type { SkillProficiencyMap } from '@/game/models/skill'
 import type { ElementType, GongfaQuality } from '@/game/types'
 
@@ -44,6 +48,8 @@ export interface Gongfa {
   penetrationBonus: number
   /** 韧性加成，降低被暴击概率 */
   tenacityBonus: number
+  /** 功法等级带来的额外灵气转化率（累加小数，如 0.05 = +5%） */
+  conversionRateBonus: number
   /** 功法描述文案 */
   description: string
   /** 圆满后永久被动描述 */
@@ -444,6 +450,101 @@ export const GONGFA_TEMPLATES: GongfaTemplate[] = [
 
 const gongfaTemplateById = new Map(GONGFA_TEMPLATES.map((item) => [item.id, item]))
 
+type GongfaCombatBonusKey =
+  | 'attackBonus'
+  | 'defenseBonus'
+  | 'hpBonus'
+  | 'mpBonus'
+  | 'speedBonus'
+  | 'critRateBonus'
+  | 'critDamageBonus'
+  | 'penetrationBonus'
+  | 'tenacityBonus'
+
+const GONGFA_GROWTH_FIELD_MAP: Record<GongfaCombatBonusKey, keyof GongfaQualityPerLevelGrowth> = {
+  attackBonus: 'attack',
+  defenseBonus: 'defense',
+  hpBonus: 'hp',
+  mpBonus: 'mp',
+  speedBonus: 'speed',
+  critRateBonus: 'critRate',
+  critDamageBonus: 'critDamage',
+  penetrationBonus: 'penetration',
+  tenacityBonus: 'tenacity',
+}
+
+/**
+ * 取品质增幅区间中值（同品质功法使用稳定成长，避免随机波动）
+ */
+function pickGrowthMidpoint(range: [number, number]): number {
+  return (range[0] + range[1]) / 2
+}
+
+/**
+ * 按品质与等级计算功法战斗属性与灵气转化率加成
+ * 模板数值为 1 级基础；2 级起按品质区间累加，仅对模板中非零基础属性生效
+ */
+export function calcGongfaBonusesAtLevel(
+  template: GongfaTemplate,
+  level: number,
+): Pick<
+  Gongfa,
+  | 'attackBonus'
+  | 'defenseBonus'
+  | 'hpBonus'
+  | 'mpBonus'
+  | 'speedBonus'
+  | 'critRateBonus'
+  | 'critDamageBonus'
+  | 'penetrationBonus'
+  | 'tenacityBonus'
+  | 'conversionRateBonus'
+> {
+  const growth = GONGFA_QUALITY_LEVEL_GROWTH[template.quality]
+  const levelUps = Math.max(0, Math.min(level - 1, template.maxLevel - 1))
+  const roundStat = (value: number) => Math.round(value * 100) / 100
+
+  const bonuses = {
+    attackBonus: template.attackBonus,
+    defenseBonus: template.defenseBonus,
+    hpBonus: template.hpBonus,
+    mpBonus: template.mpBonus,
+    speedBonus: template.speedBonus,
+    critRateBonus: template.critRateBonus,
+    critDamageBonus: template.critDamageBonus,
+    penetrationBonus: template.penetrationBonus,
+    tenacityBonus: template.tenacityBonus,
+    conversionRateBonus: 0,
+  }
+
+  for (const [bonusKey, growthKey] of Object.entries(GONGFA_GROWTH_FIELD_MAP) as Array<
+    [GongfaCombatBonusKey, keyof GongfaQualityPerLevelGrowth]
+  >) {
+    const templateStatValue = template[bonusKey]
+    if (templateStatValue > 0) {
+      bonuses[bonusKey] = roundStat(
+        templateStatValue + levelUps * pickGrowthMidpoint(growth[growthKey] as [number, number]),
+      )
+    }
+  }
+
+  bonuses.conversionRateBonus = Number(
+    (levelUps * pickGrowthMidpoint(growth.conversionRate)).toFixed(4),
+  )
+
+  return bonuses
+}
+
+/**
+ * 根据当前等级刷新功法实例的战斗属性与灵气转化率
+ */
+export function syncGongfaLevelBonuses(gongfa: Gongfa): void {
+  const template = getGongfaTemplate(gongfa.id)
+  if (!template) return
+
+  Object.assign(gongfa, calcGongfaBonusesAtLevel(template, gongfa.level))
+}
+
 /**
  * 按 id 获取功法模板
  */
@@ -452,15 +553,24 @@ export function getGongfaTemplate(gongfaId: string): GongfaTemplate | undefined 
 }
 
 /**
+ * 获取功法模板主五行（取 elements 首项，无则默认土）
+ */
+export function getGongfaTemplatePrimaryElement(
+  template: Pick<GongfaTemplate, 'element' | 'elements'>,
+): ElementType {
+  if (template.elements.length > 0) return template.elements[0]
+  if (template.element === '金' || template.element === '木' || template.element === '水'
+    || template.element === '火' || template.element === '土') {
+    return template.element
+  }
+  return '土'
+}
+
+/**
  * 获取功法经验计算用的主五行（取 elements 首项，无则默认土）
  */
 export function getGongfaPrimaryElement(gongfa: Gongfa): ElementType {
-  if (gongfa.elements.length > 0) return gongfa.elements[0]
-  if (gongfa.element === '金' || gongfa.element === '木' || gongfa.element === '水'
-    || gongfa.element === '火' || gongfa.element === '土') {
-    return gongfa.element
-  }
-  return '土'
+  return getGongfaTemplatePrimaryElement(gongfa)
 }
 
 /**
@@ -475,7 +585,7 @@ export function createGongfaFromTemplate(
     throw new Error(`未知功法模板：${templateId}`)
   }
 
-  return {
+  const gongfa: Gongfa = {
     id: template.id,
     name: template.name,
     quality: template.quality,
@@ -495,12 +605,16 @@ export function createGongfaFromTemplate(
     critDamageBonus: template.critDamageBonus,
     penetrationBonus: template.penetrationBonus,
     tenacityBonus: template.tenacityBonus,
+    conversionRateBonus: 0,
     description: template.description,
     permanentPassive: template.permanentPassive,
     skillIds: [...template.skillIds],
     skillProficiency: {},
     ...overrides,
   }
+
+  syncGongfaLevelBonuses(gongfa)
+  return gongfa
 }
 
 /** 初始赠送功法 */

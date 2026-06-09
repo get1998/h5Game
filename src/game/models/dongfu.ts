@@ -51,7 +51,6 @@ export function buildDongfuDisplay(dongfu: Dongfu) {
   const zhenfa = getZhenfaLevelConfig(dongfu.zhenfaLevel)
   const maxLingqi = config.maxLingqi
   const lingqiPercent = maxLingqi > 0 ? Math.floor((dongfu.lingqi / maxLingqi) * 100) : 0
-
   return {
     level: dongfu.level,
     name: config.name,

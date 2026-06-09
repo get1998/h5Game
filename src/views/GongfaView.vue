@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import GameLayout from '@/components/layout/GameLayout.vue'
-import { getSkillsByGongfaId, SKILL_CATEGORY_LABEL } from '@/game/models/skill'
+import {
+  calcSkillProficiencyProgress,
+  formatSkillDescription,
+  getSkillProficiency,
+  getSkillsByGongfaId,
+  SKILL_CATEGORY_LABEL,
+} from '@/game/models/skill'
 import { useGameStore } from '@/stores/game'
 import { usePlayerStore } from '@/stores/player'
 
@@ -19,18 +25,28 @@ const skillsExpandedMap = ref<Record<string, boolean>>({})
 
 const gongfaItems = computed(() =>
   playerStore.gongfaList.map((gongfa) => {
-    const skills = getSkillsByGongfaId(gongfa.id).map((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      typeLabel: SKILL_TYPE_LABEL[skill.type] ?? skill.type,
-      categoryLabel: SKILL_CATEGORY_LABEL[skill.category] ?? skill.category,
-      effect: skill.description,
-      minLevel: skill.minLevel,
-      isUnlocked: gongfa.level >= skill.minLevel,
-      itemClass: gongfa.level >= skill.minLevel
-        ? 'gongfa-skill gongfa-skill--unlocked'
-        : 'gongfa-skill gongfa-skill--locked',
-    }))
+    const skills = getSkillsByGongfaId(gongfa.id).map((skill) => {
+      const isUnlocked = gongfa.level >= skill.minLevel
+      const proficiency = getSkillProficiency(gongfa.skillProficiency, skill.id)
+      const progress = calcSkillProficiencyProgress(proficiency)
+
+      return {
+        id: skill.id,
+        name: skill.name,
+        typeLabel: SKILL_TYPE_LABEL[skill.type] ?? skill.type,
+        categoryLabel: SKILL_CATEGORY_LABEL[skill.category] ?? skill.category,
+        effect: formatSkillDescription(skill, isUnlocked ? proficiency : 0),
+        minLevel: skill.minLevel,
+        isUnlocked,
+        itemClass: isUnlocked
+          ? 'gongfa-skill gongfa-skill--unlocked'
+          : 'gongfa-skill gongfa-skill--locked',
+        proficiencyPercent: progress.percent,
+        proficiencyBarStyle: progress.barStyle,
+        proficiencyText: isUnlocked ? progress.progressText : '',
+        levelText: isUnlocked ? progress.levelText : '',
+      }
+    })
 
     return {
       ...gongfa,
@@ -130,8 +146,14 @@ function toggleSkills(gongfaId: string) {
                 <span class="gongfa-skill__type">{{ skill.typeLabel }} · {{ skill.categoryLabel }}</span>
               </div>
               <p class="gongfa-skill__effect">{{ skill.effect }}</p>
-              <p class="gongfa-skill__level">
-                {{ skill.isUnlocked ? '已领悟' : `功法 ${skill.minLevel} 级领悟` }}
+              <template v-if="skill.isUnlocked">
+                <div class="progress-bar progress-bar--skill">
+                  <div class="progress-bar__fill progress-bar__fill--skill" :style="skill.proficiencyBarStyle" />
+                </div>
+                <p class="gongfa-skill__proficiency">{{ skill.proficiencyText }}</p>
+              </template>
+              <p v-else class="gongfa-skill__level">
+                功法 {{ skill.minLevel }} 级领悟
               </p>
             </div>
           </div>
@@ -304,6 +326,21 @@ function toggleSkills(gongfaId: string) {
   font-size: 12px;
   color: $color-text-muted;
   line-height: 1.4;
+}
+
+.progress-bar--skill {
+  margin-top: 6px;
+}
+
+.progress-bar__fill--skill {
+  background: #9b7fd4;
+}
+
+.gongfa-skill__proficiency {
+  margin-top: 4px;
+  font-size: 11px;
+  color: $color-text-muted;
+  text-align: right;
 }
 
 .gongfa-skill__level {

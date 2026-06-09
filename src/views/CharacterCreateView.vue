@@ -109,7 +109,6 @@ function handleSelectGongfa(templateId: string) {
  */
 function handleConfirm() {
   if (!originResult.value || !selectedGongfaTemplateId.value) return
-
   const name = playerName.value.trim() || '无名修士'
   playerStore.createCharacter({
     name,

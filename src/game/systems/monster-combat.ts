@@ -3,6 +3,7 @@ import type { MonsterTemplate } from '@/game/constants/maps'
 import { createGongfaFromTemplate, type Gongfa } from '@/game/models/gongfa'
 import type { Monster, MonsterKind } from '@/game/models/monster'
 import type { CombatStats } from '@/game/models/player'
+import type { RealmStage } from '@/game/types'
 
 /**
  * 怪物类型对境界基础属性的系数
@@ -15,7 +16,7 @@ export const MONSTER_REALM_COEFFICIENT_BY_KIND: Record<MonsterKind, number> = {
 }
 
 
-/** 品阶对整数战斗属性的倍率 */
+/** 品阶对整数战斗属性（气血、攻击、防御、速度、穿透）的倍率 */
 export const TIER_STAT_MULTIPLIERS: Record<Monster['tier'], number> = {
   普通: 1,
   精英: 1.3,
@@ -23,6 +24,35 @@ export const TIER_STAT_MULTIPLIERS: Record<Monster['tier'], number> = {
   传奇: 2,
 }
 
+/** 品阶对比率战斗属性（暴击率、暴击伤害、命中、闪避）的倍率 */
+export const TIER_RATE_MULTIPLIERS: Record<Monster['tier'], number> = {
+  普通: 1,
+  精英: 1.15,
+  首领: 1.3,
+  传奇: 1.5,
+}
+
+/** 品阶综合战斗系数（种类 × 品阶） */
+export interface TierCombatCoefficients {
+  /** 整数属性综合系数 */
+  stat: number
+  /** 比率属性综合系数 */
+  rate: number
+}
+
+/**
+ * 获取怪物种类与品阶的综合战斗系数
+ */
+export function getTierCombatCoefficients(
+  kind: MonsterKind,
+  tier: Monster['tier'],
+): TierCombatCoefficients {
+  const kindCoeff = MONSTER_REALM_COEFFICIENT_BY_KIND[kind]
+  return {
+    stat: kindCoeff * TIER_STAT_MULTIPLIERS[tier],
+    rate: kindCoeff * TIER_RATE_MULTIPLIERS[tier],
+  }
+}
 /** 无功法加成时的空功法属性（妖兽 / 灵兽） */
 const EMPTY_GONGFA_BONUSES: Pick<
   Gongfa,
@@ -84,37 +114,45 @@ function getMonsterGongfaBonuses(template: MonsterTemplate, gongfaId?: string) {
 }
 
 /**
- * 根据怪物模板合成战斗属性：境界基础 + 功法加成（仅人） → 种类/品阶综合系数 → 个体修正
- * 全部战斗属性（含气血、暴击、命中等）统一乘系数，妖兽/灵兽显著强于同境修士
+ * 根据怪物模板合成战斗属性：境界基础 + 功法加成（仅人） → 种类×品阶综合系数 → 个体修正
+ * 整数属性与比率属性分别应用 stat / rate 系数，高品阶怪物除面板更高外暴击/命中也更强
  * 在遇怪创建实例时调用一次，结果写入 monster.combat
+ * @param template 怪物模板
+ * @param realm 遇怪时从地图境界区间随机得到的修仙等级
+ * @param tier 遇怪时随机生成的品阶
+ * @param gongfaId 人型怪物匹配的功法 id
  */
 export function buildMonsterCombat(
   template: MonsterTemplate,
+  realm: RealmStage,
+  tier: Monster['tier'],
   gongfaId?: string,
 ): CombatStats {
-  const realm = getRealmBaseStats(template.realm)
+  const realmStats = getRealmBaseStats(realm)
   const gongfa = getMonsterGongfaBonuses(template, gongfaId)
-  const kindCoeff = MONSTER_REALM_COEFFICIENT_BY_KIND[template.kind]
-  const coefficient = kindCoeff * TIER_STAT_MULTIPLIERS[template.tier]
+  const { stat: statCoeff, rate: rateCoeff } = getTierCombatCoefficients(
+    template.kind,
+    tier,
+  )
   const mod = template.statModifiers ?? {}
 
-  const maxHp = scaleStat(realm.maxHp + gongfa.hpBonus, coefficient) + (mod.maxHp ?? 0)
-  const maxMp = scaleStat(realm.maxMp + gongfa.mpBonus, coefficient) + (mod.maxMp ?? 0)
-  const attack = scaleStat(realm.attack + gongfa.attackBonus, coefficient) + (mod.attack ?? 0)
-  const defense = scaleStat(realm.defense + gongfa.defenseBonus, coefficient) + (mod.defense ?? 0)
-  const speed = scaleStat(realm.speed + gongfa.speedBonus, coefficient) + (mod.speed ?? 0)
-  const penetration = scaleStat(realm.penetration + gongfa.penetrationBonus, coefficient)
+  const maxHp = scaleStat(realmStats.maxHp + gongfa.hpBonus, statCoeff) + (mod.maxHp ?? 0)
+  const maxMp = scaleStat(realmStats.maxMp + gongfa.mpBonus, statCoeff) + (mod.maxMp ?? 0)
+  const attack = scaleStat(realmStats.attack + gongfa.attackBonus, statCoeff) + (mod.attack ?? 0)
+  const defense = scaleStat(realmStats.defense + gongfa.defenseBonus, statCoeff) + (mod.defense ?? 0)
+  const speed = scaleStat(realmStats.speed + gongfa.speedBonus, statCoeff) + (mod.speed ?? 0)
+  const penetration = scaleStat(realmStats.penetration + gongfa.penetrationBonus, statCoeff)
     + (mod.penetration ?? 0)
 
   const critRate = clampRate(
-    scaleRate(realm.critRate + gongfa.critRateBonus, coefficient) + (mod.critRate ?? 0),
+    scaleRate(realmStats.critRate + gongfa.critRateBonus, rateCoeff) + (mod.critRate ?? 0),
   )
   const critDamage = Number(
-    (scaleRate(realm.critDamage + gongfa.critDamageBonus, coefficient) + (mod.critDamage ?? 0))
+    (scaleRate(realmStats.critDamage + gongfa.critDamageBonus, rateCoeff) + (mod.critDamage ?? 0))
       .toFixed(2),
   )
-  const hitRate = clampRate(scaleRate(realm.hitRate, coefficient) + (mod.hitRate ?? 0))
-  const dodgeRate = clampRate(scaleRate(realm.dodgeRate, coefficient) + (mod.dodgeRate ?? 0))
+  const hitRate = clampRate(scaleRate(realmStats.hitRate, rateCoeff) + (mod.hitRate ?? 0))
+  const dodgeRate = clampRate(scaleRate(realmStats.dodgeRate, rateCoeff) + (mod.dodgeRate ?? 0))
 
   const safeMaxHp = Math.max(1, maxHp)
   const safeMaxMp = Math.max(0, maxMp)

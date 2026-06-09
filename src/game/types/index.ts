@@ -14,7 +14,7 @@ export type SpiritRootType = '单灵根' | '双灵根' | '杂灵根'
 export interface BattleLogEntry {
   id: string
   text: string
-  type: 'info' | 'damage' | 'heal' | 'crit' | 'miss' | 'system'
+  type: 'info' | 'damage' | 'heal' | 'crit' | 'miss' | 'system' | 'skill'
   timestamp: number
 }
 

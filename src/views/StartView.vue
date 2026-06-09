@@ -42,7 +42,7 @@ function handleRestart() {
       <header class="start-header">
         <p class="start-header__eyebrow">文字修仙 · 挂机修炼</p>
         <h1 class="start-header__title">修仙挂机</h1>
-        <p class="start-header__desc">踏入仙途，闭关悟道，斩妖除魔</p>
+        <p class="start-header__desc">踏入仙途，修炼悟道，斩妖除魔</p>
       </header>
 
       <div class="start-actions">

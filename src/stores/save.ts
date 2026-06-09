@@ -1,7 +1,11 @@
 import { calcExpToNextLevel } from '@/game/formulas/gongfa-exp'
-import { createStarterGongfa, type Gongfa } from '@/game/models/gongfa'
+import { createStarterGongfa, syncGongfaLevelBonuses, type Gongfa } from '@/game/models/gongfa'
 import { createDefaultDongfu, normalizeDongfu, type Dongfu } from '@/game/models/dongfu'
-import { createDefaultPlayer, type Player } from '@/game/models/player'
+import {
+  createDefaultMonsterTierPityState,
+  type MonsterTierPityState,
+} from '@/game/models/monster'
+import { createDefaultPlayer, resyncPlayerRealmStats, type Player } from '@/game/models/player'
 import { normalizeRealm } from '@/game/constants/realm'
 import { createInitialWorldTime, type WorldTime } from '@/game/systems/time'
 import type { IdleState } from '@/game/types'
@@ -16,6 +20,8 @@ export interface GameSaveData {
   worldTime: WorldTime
   dongfu: Dongfu
   idle: IdleState
+  /** 怪物品阶保底计数 */
+  monsterTierPity: MonsterTierPityState
 }
 
 /** 创建默认闭关状态 */
@@ -38,6 +44,7 @@ export function createDefaultGameSave(): GameSaveData {
     worldTime: createInitialWorldTime(),
     dongfu: createDefaultDongfu(),
     idle: createDefaultIdleState(),
+    monsterTierPity: createDefaultMonsterTierPityState(),
   }
 }
 
@@ -45,26 +52,37 @@ export function createDefaultGameSave(): GameSaveData {
 function normalizeGongfa(gongfa: Gongfa): Gongfa {
   const level = gongfa.level ?? 1
   const maxLevel = gongfa.maxLevel ?? 10
-  return {
+  const normalized: Gongfa = {
     ...gongfa,
     level,
     maxLevel,
     exp: gongfa.exp ?? 0,
     expToNext: gongfa.expToNext ?? (level >= maxLevel ? 0 : calcExpToNextLevel(level)),
+    conversionRateBonus: gongfa.conversionRateBonus ?? 0,
     skillProficiency: gongfa.skillProficiency ?? {},
   }
+  syncGongfaLevelBonuses(normalized)
+  return normalized
+}
+
+/** 规范化玩家数据（兼容旧版本字段，并按最新境界表重算基础属性） */
+function normalizePlayer(player: Player): Player {
+  const normalized: Player = {
+    ...player,
+    realm: normalizeRealm(player.realm),
+    originTitle: player.originTitle ?? '',
+    originSummary: player.originSummary ?? '',
+  }
+  // 怪物遇敌时实时读取境界表，玩家属性存于存档，需在读档时同步
+  resyncPlayerRealmStats(normalized, { preserveResourceRatio: true })
+  return normalized
 }
 
 /** 规范化存档数据（兼容旧版本字段） */
 export function normalizeSaveData(data: GameSaveData): GameSaveData {
   return {
     ...data,
-    player: {
-      ...data.player,
-      realm: normalizeRealm(data.player.realm),
-      originTitle: data.player.originTitle ?? '',
-      originSummary: data.player.originSummary ?? '',
-    },
+    player: normalizePlayer(data.player),
     gongfaList: (data.gongfaList ?? []).map(normalizeGongfa),
     worldTime: data.worldTime ?? createInitialWorldTime(),
     dongfu: normalizeDongfu(data.dongfu),
@@ -72,6 +90,10 @@ export function normalizeSaveData(data: GameSaveData): GameSaveData {
       ...createDefaultIdleState(),
       ...data.idle,
       xiuweiRemainder: data.idle?.xiuweiRemainder ?? 0,
+    },
+    monsterTierPity: {
+      ...createDefaultMonsterTierPityState(),
+      ...data.monsterTierPity,
     },
   }
 }
@@ -81,7 +103,10 @@ export function loadSave(): GameSaveData | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
-    return normalizeSaveData(JSON.parse(raw) as GameSaveData)
+    const normalized = normalizeSaveData(JSON.parse(raw) as GameSaveData)
+    // 规范化后写回，确保境界表调整后玩家属性与怪物使用同一套数值
+    persistSave(normalized)
+    return normalized
   } catch {
     return null
   }

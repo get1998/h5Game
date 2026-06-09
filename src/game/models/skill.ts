@@ -1,4 +1,56 @@
 import skillsData from '@/game/models/skills.json'
+import {
+  isElementType,
+  pickCounterElementAgainst,
+  pickRandomCounterElement,
+} from '@/game/constants/elements'
+import {
+  getNextSkillLevelThreshold,
+  getSkillLevelCoefficient,
+  getSkillLevelFromProficiency,
+  getSkillProficiencyCoefficient,
+  SKILL_PROFICIENCY_THRESHOLDS,
+  type SkillLevel,
+} from '@/game/constants/skill-level'
+import {
+  getSkillLevelScalableParamKeys,
+  getScaledSkillParams,
+  getSkillParamRule,
+  resolveSkillEffectDescription,
+  type SkillParams,
+  validateSkillCatalog,
+} from '@/game/constants/skill-params'
+import type { ElementType } from '@/game/types'
+
+export type { SkillLevel } from '@/game/constants/skill-level'
+export {
+  getNextSkillLevelThreshold,
+  getSkillLevelCoefficient,
+  getSkillLevelFromProficiency,
+  getSkillProficiencyCoefficient,
+  SKILL_LEVEL_COEFFICIENT,
+  SKILL_LEVEL_ORDER,
+  SKILL_PROFICIENCY_BASE_GAIN,
+  SKILL_PROFICIENCY_THRESHOLDS,
+} from '@/game/constants/skill-level'
+export {
+  formatSkillParamDisplayFragment,
+  formatSkillParamDisplayValue,
+  formatSkillPercentText,
+  getScaledSkillParams,
+  getSkillLevelScalableParamKeys,
+  getSkillParamRule,
+  isSkillLevelScalableParam,
+  resolveSkillEffectDescription,
+  scaleSkillParamValue,
+  SKILL_PARAM_RULES,
+  validateSkillCatalog,
+  validateSkillParams,
+  type KnownSkillParamKey,
+  type SkillConfigIssue,
+  type SkillParamRule,
+  type SkillParams,
+} from '@/game/constants/skill-params'
 
 /** 技能释放类型（主动 / 被动 / 绝技） */
 export type SkillType = 'active' | 'passive' | 'ultimate'
@@ -12,32 +64,6 @@ export type SkillType = 'active' | 'passive' | 'ultimate'
  * - passive：被动（不参与主动释放选择）
  */
 export type SkillCategory = 'attack' | 'defense' | 'heal' | 'buff' | 'passive'
-
-/** 技能等级（由熟练度达标后晋升） */
-export type SkillLevel = '小成' | '大成' | '圆满'
-
-/** 技能等级顺序（由低到高） */
-export const SKILL_LEVEL_ORDER: SkillLevel[] = ['小成', '大成', '圆满']
-
-/** 技能等级对应的伤害/效果系数 */
-export const SKILL_LEVEL_COEFFICIENT: Record<SkillLevel, number> = {
-  小成: 1.2,
-  大成: 1.5,
-  圆满: 1.8,
-}
-
-/**
- * 各 SkillLevel 所需的最低熟练度
- * 解锁技能时熟练度为 0，即已达「小成」门槛
- */
-export const SKILL_PROFICIENCY_THRESHOLDS: Record<SkillLevel, number> = {
-  小成: 0,
-  大成: 400,
-  圆满: 1200,
-}
-
-/** 单次施展技能的基础熟练度增量（再乘境界差倍率） */
-export const SKILL_PROFICIENCY_BASE_GAIN = 8
 
 /** 功法内各技能熟练度，key 为技能 id */
 export type SkillProficiencyMap = Record<string, number>
@@ -65,24 +91,24 @@ export interface Skill {
   costMp: number
   /** 冷却回合数 */
   cooldown: number
-  /** 效果描述文案 */
+  /** 效果描述文案（配置表基础文案，展示时用 formatSkillDescription） */
   description: string
-  /** 效果参数（伤害倍率、持续回合等） */
-  params: Record<string, unknown>
+  /** 效果参数（见 constants/skill-params.ts 填表规则） */
+  params: SkillParams
   /** 来源功法 id */
   sourceGongfaId: string
   /** 来源功法名称 */
   sourceGongfa: string
   /** 解锁所需功法等级 */
   minLevel: number
-  /** 技能等级 */
-  level: SkillLevel
 }
 
-/** 技能释放上下文（灵力、冷却） */
+/** 技能释放上下文（灵力、冷却、熟练度） */
 export interface SkillCastContext {
   playerMp: number
   skillCooldowns: Record<string, number>
+  /** 功法技能熟练度，用于按等级加权选技 */
+  skillProficiency?: SkillProficiencyMap
 }
 
 /** skills.json 原始行结构（蛇形命名，映射前） */
@@ -94,13 +120,12 @@ interface SkillJsonRow {
   cooldown: number
   /** 效果描述文案 */
   effect: string
-  /** 可选显式分类，未填时自动推断 */
+  /** 可选显式分类，未填时按 params 规则自动推断 */
   category?: SkillCategory
-  params: Record<string, unknown>
+  params: SkillParams
   source_gongfa_id: string
   source_gongfa: string
   min_level: number
-  level?: SkillLevel
 }
 
 /**
@@ -117,6 +142,13 @@ export function inferSkillCategory(row: SkillJsonRow): SkillCategory {
   const params = row.params ?? {}
   const effectText = row.effect ?? ''
 
+  for (const [key, value] of Object.entries(params)) {
+    const rule = getSkillParamRule(key)
+    if (rule?.categoryHint && value !== undefined && value !== null) {
+      return rule.categoryHint
+    }
+  }
+
   if (typeof params.damage_percent === 'number') {
     return 'attack'
   }
@@ -132,7 +164,7 @@ export function inferSkillCategory(row: SkillJsonRow): SkillCategory {
 
   if (
     typeof params.defense_bonus_percent === 'number'
-    || typeof params.damage_reduction_percent === 'number'
+    || typeof params.damage_reduction === 'number'
     || effectText.includes('防御')
     || effectText.includes('受到伤害')
     || effectText.includes('伤害-')
@@ -151,19 +183,45 @@ export function isCastableSkill(skill: Skill): boolean {
 }
 
 /**
- * 计算攻击技能伤害权重（用于自动选择最高伤害技能）
- * 多段攻击按段数 × 倍率估算总伤害
+ * 读取技能配置中的基础伤害倍率（不含等级加成）
  */
-export function getAttackDamageWeight(skill: Skill): number {
-  const multiplier = typeof skill.params.damage_percent === 'number'
-    ? skill.params.damage_percent
-    : 0
-  const hitCount = typeof skill.params.hit_count === 'number'
-    ? skill.params.hit_count
-    : typeof skill.params.skill_count === 'number'
-      ? skill.params.skill_count
-      : 1
-  return multiplier * hitCount
+export function getSkillBaseDamageMultiplier(skill: Skill): number {
+  const percent = skill.params.damage_percent
+  return typeof percent === 'number' ? percent : 1
+}
+
+/**
+ * 读取技能攻击段数（多段攻击）
+ */
+export function getSkillHitCount(skill: Skill): number {
+  const params = skill.params
+  if (typeof params.hit_count === 'number' && params.hit_count > 0) {
+    return Math.floor(params.hit_count)
+  }
+  if (typeof params.skill_count === 'number' && params.skill_count > 0) {
+    return Math.floor(params.skill_count)
+  }
+  return 1
+}
+
+/**
+ * 计算技能实际伤害倍率（基础倍率 × 等级系数）
+ */
+export function getSkillDamageMultiplier(
+  skill: Skill,
+  proficiencyOrLevel: number | SkillLevel = 0,
+): number {
+  const scaled = getScaledSkillParams(skill.params, proficiencyOrLevel)
+  const percent = scaled.damage_percent
+  return typeof percent === 'number' ? percent : getSkillBaseDamageMultiplier(skill)
+}
+
+/**
+ * 计算攻击技能伤害权重（用于自动选择最高伤害技能）
+ */
+export function getAttackDamageWeight(skill: Skill, proficiency = 0): number {
+  if (skill.category !== 'attack') return 0
+  return getSkillDamageMultiplier(skill, proficiency) * getSkillHitCount(skill)
 }
 
 /**
@@ -184,12 +242,15 @@ export function getCastableAttackSkills(
 ): Skill[] {
   return skills
     .filter((skill) => skill.category === 'attack' && canCastSkill(skill, context))
-    .sort((a, b) => getAttackDamageWeight(b) - getAttackDamageWeight(a))
+    .sort((a, b) => {
+      const profA = getSkillProficiency(context.skillProficiency, a.id)
+      const profB = getSkillProficiency(context.skillProficiency, b.id)
+      return getAttackDamageWeight(b, profB) - getAttackDamageWeight(a, profA)
+    })
 }
 
 /**
  * 自动选择伤害最高的可释放攻击技能
- * 灵力不足或冷却中时顺延下一个符合条件的攻击技能
  */
 export function selectBestAttackSkill(
   skills: Skill[],
@@ -207,16 +268,22 @@ function mapSkillRow(row: SkillJsonRow): Skill {
     costMp: row.cost_mp,
     cooldown: row.cooldown,
     description: row.effect,
-    params: row.params,
+    params: row.params ?? {},
     sourceGongfaId: row.source_gongfa_id,
     sourceGongfa: row.source_gongfa,
     minLevel: row.min_level,
-    level: row.level ?? '小成',
   }
 }
 
 /** 全部功法技能配置 */
 export const SKILL_CATALOG: Skill[] = (skillsData.skills as unknown as SkillJsonRow[]).map(mapSkillRow)
+
+if (import.meta.env.DEV) {
+  const issues = validateSkillCatalog(SKILL_CATALOG)
+  for (const issue of issues) {
+    console.warn(`[skill-config] ${issue.skillId}: ${issue.message}`)
+  }
+}
 
 const skillById = new Map(SKILL_CATALOG.map((skill) => [skill.id, skill]))
 const skillsByGongfaId = new Map<string, Skill[]>()
@@ -271,36 +338,17 @@ export function getNextSkillUnlock(gongfaId: string, gongfaLevel: number): Skill
 }
 
 /**
- * 根据熟练度判定当前技能等级
+ * 根据技能等级生成动态效果描述
  */
-export function getSkillLevelFromProficiency(proficiency: number): SkillLevel {
-  if (proficiency >= SKILL_PROFICIENCY_THRESHOLDS.圆满) return '圆满'
-  if (proficiency >= SKILL_PROFICIENCY_THRESHOLDS.大成) return '大成'
-  return '小成'
-}
-
-/**
- * 获取技能等级对应的效果系数
- */
-export function getSkillLevelCoefficient(level: SkillLevel): number {
-  return SKILL_LEVEL_COEFFICIENT[level]
-}
-
-/**
- * 根据熟练度获取效果系数
- */
-export function getSkillProficiencyCoefficient(proficiency: number): number {
-  return getSkillLevelCoefficient(getSkillLevelFromProficiency(proficiency))
-}
-
-/**
- * 获取升至下一 SkillLevel 所需熟练度；已满级时返回 null
- */
-export function getNextSkillLevelThreshold(currentLevel: SkillLevel): number | null {
-  const index = SKILL_LEVEL_ORDER.indexOf(currentLevel)
-  const nextLevel = SKILL_LEVEL_ORDER[index + 1]
-  if (!nextLevel) return null
-  return SKILL_PROFICIENCY_THRESHOLDS[nextLevel]
+export function formatSkillDescription(
+  skill: Skill,
+  proficiencyOrLevel: number | SkillLevel = 0,
+): string {
+  return resolveSkillEffectDescription(
+    skill.description,
+    skill.params,
+    proficiencyOrLevel,
+  )
 }
 
 /**
@@ -311,4 +359,96 @@ export function getSkillProficiency(
   skillId: string,
 ): number {
   return proficiencyMap?.[skillId] ?? 0
+}
+
+/** 技能熟练度进度展示数据 */
+export interface SkillProficiencyProgress {
+  level: SkillLevel
+  proficiency: number
+  levelText: string
+  percent: number
+  barStyle: string
+  progressText: string
+}
+
+/**
+ * 计算技能熟练度进度（当前等级段内的百分比与展示文案）
+ */
+export function calcSkillProficiencyProgress(proficiency: number): SkillProficiencyProgress {
+  const level = getSkillLevelFromProficiency(proficiency)
+  const currentThreshold = SKILL_PROFICIENCY_THRESHOLDS[level]
+  const nextThreshold = getNextSkillLevelThreshold(level)
+
+  if (!nextThreshold) {
+    return {
+      level,
+      proficiency,
+      levelText: '圆满',
+      percent: 100,
+      barStyle: 'width: 100%',
+      progressText: `熟练度 ${proficiency}（圆满）`,
+    }
+  }
+
+  const range = nextThreshold - currentThreshold
+  const progress = proficiency - currentThreshold
+  const percent = Math.min(100, Math.floor((progress / range) * 100))
+
+  return {
+    level,
+    proficiency,
+    levelText: level,
+    percent,
+    barStyle: `width: ${percent}%`,
+    progressText: `熟练度 ${proficiency} / ${nextThreshold}（${level}）`,
+  }
+}
+
+/**
+ * 解析技能攻击时的五行属性
+ */
+export function resolveSkillAttackElement(
+  skill: Skill,
+  gongfaElements: ElementType[],
+  gongfaFallback: ElementType,
+  targetElement: ElementType,
+): ElementType | undefined {
+  const raw = skill.params.element
+  if (isElementType(raw)) return raw
+
+  if (raw === 'auto_counter' || raw === '五行轮回') {
+    const pool = gongfaElements.length > 0 ? gongfaElements : [gongfaFallback]
+    return pickCounterElementAgainst(targetElement, pool) ?? gongfaFallback
+  }
+
+  if (raw === 'random_wuxing') {
+    return pickRandomCounterElement(targetElement)
+  }
+
+  return undefined
+}
+
+/** @deprecated 使用 getSkillLevelScalableParamKeys */
+export const SKILL_SCALABLE_PARAM_KEYS = getSkillLevelScalableParamKeys()
+
+/** @deprecated 减益类 key 已合并至 SKILL_PARAM_RULES */
+export const SKILL_SCALABLE_REDUCTION_PARAM_KEYS = [
+  'damage_reduction',
+  'physical_damage_reduction',
+  'counter_damage_reduction',
+  'crit_damage_reduction',
+  'hit_rate_reduction',
+  'weakness_attack_reduction',
+] as const
+
+/** @deprecated 使用 scaleSkillParamValue */
+export function getScaledSkillParamValue(
+  baseValue: number,
+  proficiencyOrLevel: number | SkillLevel = 0,
+): number {
+  return baseValue * (
+    typeof proficiencyOrLevel === 'number'
+      ? getSkillProficiencyCoefficient(proficiencyOrLevel)
+      : getSkillLevelCoefficient(proficiencyOrLevel)
+  )
 }

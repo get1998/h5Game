@@ -2,6 +2,7 @@ import {
   REALM_BREAKTHROUGH_XIUWEI,
   REALM_ORDER,
   getRealmCultivationBase,
+  getRealmXiuweiRoom,
 } from '@/game/constants/realm'
 import {
   getElementHiddenMultiplier,
@@ -65,8 +66,10 @@ export function calcCultivationRate(
   }
 
   const gongfaElement = getGongfaPrimaryElement(gongfa)
+  const levelConversionBonus = 1 + (gongfa.conversionRateBonus ?? 0)
   const conversionMultiplier =
     gongfa.expMultiplier
+    * levelConversionBonus
     * getSpiritRootAdaptMultiplier(
       player.spiritRootType,
       player.spiritRootElements,
@@ -116,6 +119,18 @@ export function calcIdleXiuwei(
   const recovery = applyLingqiRecovery(dongfu, elapsedSeconds, true, now)
   let workingDongfu = recovery.dongfu
 
+  const room = getRealmXiuweiRoom(player)
+  if (room <= 0) {
+    return {
+      gainedXiuwei: 0,
+      lingqiConsumed: 0,
+      lingqiRecovered: recovery.recovered,
+      seconds: elapsedSeconds,
+      dongfu: workingDongfu,
+      xiuweiRemainder: 0,
+    }
+  }
+
   const rate = calcCultivationRate(player, workingDongfu, gongfa)
   const maxAbsorb = rate.absorptionPerSec * elapsedSeconds
   const absorption = absorbLingqiForCultivation(
@@ -125,15 +140,34 @@ export function calcIdleXiuwei(
     xiuweiRemainder,
   )
 
+  let gainedXiuwei = absorption.gainedXiuwei
+  let lingqiConsumed = absorption.lingqiConsumed
+  let nextRemainder = absorption.xiuweiRemainder
   workingDongfu = absorption.dongfu
 
+  if (gainedXiuwei > room) {
+    const excessGain = gainedXiuwei - room
+    if (rate.conversionPerLingqi > 0) {
+      const refundLingqi = excessGain / rate.conversionPerLingqi
+      workingDongfu = {
+        ...workingDongfu,
+        lingqi: workingDongfu.lingqi + refundLingqi,
+      }
+      lingqiConsumed -= refundLingqi
+    }
+    gainedXiuwei = room
+    nextRemainder = 0
+  } else if (gainedXiuwei >= room) {
+    nextRemainder = 0
+  }
+
   return {
-    gainedXiuwei: absorption.gainedXiuwei,
-    lingqiConsumed: absorption.lingqiConsumed,
+    gainedXiuwei,
+    lingqiConsumed,
     lingqiRecovered: recovery.recovered,
     seconds: elapsedSeconds,
     dongfu: workingDongfu,
-    xiuweiRemainder: absorption.xiuweiRemainder,
+    xiuweiRemainder: nextRemainder,
   }
 }
 

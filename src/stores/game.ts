@@ -19,7 +19,7 @@ import {
   TRAINING_MAPS,
   type TrainingMap,
 } from '@/game/constants/maps'
-import { isRealmAtLeast } from '@/game/constants/realm'
+import { isRealmAtLeast, isRealmXiuweiFull } from '@/game/constants/realm'
 import { pickRandomMonster, type Monster } from '@/game/models/monster'
 import {
   getTierLootMultiplier,
@@ -58,7 +58,7 @@ export const useGameStore = defineStore('game', {
     isRecoveryLocked(state): boolean {
       return state.recoveryPhase !== 'none'
     },
-    /** 洞府闭关期间锁定除洞府页外的操作 */
+    /** 洞府修炼期间锁定除洞府页外的操作 */
     isCultivationLocked(): boolean {
       return useDongfuStore().isCultivating
     },
@@ -94,7 +94,7 @@ export const useGameStore = defineStore('game', {
     },
   },
   actions: {
-    /** 从玩家存档同步闭关状态（进入游戏时调用） */
+    /** 从玩家存档同步修炼状态（进入游戏时调用） */
     resumeCultivation() {
       if (this.cultivationResumed) return
       this.cultivationResumed = true
@@ -103,15 +103,43 @@ export const useGameStore = defineStore('game', {
       if (!dongfuStore.idle.isRunning) return
 
       this.applyCultivationElapsed()
+      if (!dongfuStore.idle.isRunning) return
       this.tickTimer = setInterval(() => this.tickIdle(), IDLE_TICK_MS)
     },
 
-    /** 开始闭关修炼 */
+    /** 清理修炼 tick 定时器 */
+    clearIdleTimer() {
+      if (this.tickTimer) {
+        clearInterval(this.tickTimer)
+        this.tickTimer = null
+      }
+    },
+
+    /** 结束修炼（不含结算，供结算流程内主动结束） */
+    finishIdle(message: string) {
+      const dongfuStore = useDongfuStore()
+      if (!dongfuStore.idle.isRunning) return
+
+      this.clearIdleTimer()
+      dongfuStore.syncIdleState({
+        ...dongfuStore.idle,
+        isRunning: false,
+      })
+      this.lastMessage = message
+    },
+
+    /** 开始修炼 */
     startIdle() {
       if (this.isRecoveryLocked) return
 
+      const playerStore = usePlayerStore()
       const dongfuStore = useDongfuStore()
       if (dongfuStore.idle.isRunning) return
+
+      if (isRealmXiuweiFull(playerStore.player)) {
+        this.lastMessage = '当前境界修为已满，请先突破后再修炼。'
+        return
+      }
 
       if (this.isAutoExploring) {
         this.stopAutoExplore()
@@ -120,7 +148,7 @@ export const useGameStore = defineStore('game', {
       if (dongfuStore.dongfu.lingqi <= 0) {
         const recovery = calcLingqiRecoveryPerSec(dongfuStore.dongfu, true)
         if (recovery <= 0) {
-          this.lastMessage = '灵气枯竭，需等待恢复或布置聚灵阵后方可闭关。'
+          this.lastMessage = '灵气枯竭，需等待恢复或布置聚灵阵后方可修炼。'
           return
         }
       }
@@ -132,27 +160,24 @@ export const useGameStore = defineStore('game', {
         lastTickAt: now,
       })
       this.tickTimer = setInterval(() => this.tickIdle(), IDLE_TICK_MS)
-      this.lastMessage = '开始闭关，吸纳天地灵气修炼。'
+      this.lastMessage = '开始修炼，吸纳天地灵气。'
     },
 
-    /** 停止闭关 */
-    stopIdle() {
+    /** 停止修炼 */
+    stopIdle(message?: string) {
       const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
 
       this.applyCultivationElapsed()
-      if (this.tickTimer) {
-        clearInterval(this.tickTimer)
-        this.tickTimer = null
-      }
+      this.clearIdleTimer()
       dongfuStore.syncIdleState({
         ...dongfuStore.idle,
         isRunning: false,
       })
-      this.lastMessage = '结束闭关。'
+      this.lastMessage = message ?? '结束修炼。'
     },
 
-    /** 结算自上次 tick 以来的闭关修为（在线/离线统一逻辑） */
+    /** 结算自上次 tick 以来的修炼修为（在线/离线统一逻辑） */
     applyCultivationElapsed() {
       const playerStore = usePlayerStore()
       const dongfuStore = useDongfuStore()
@@ -181,12 +206,16 @@ export const useGameStore = defineStore('game', {
 
       if (result.gainedXiuwei > 0) {
         playerStore.addXiuwei(result.gainedXiuwei)
-      } else if (dongfuStore.dongfu.lingqi <= 0) {
-        this.lastMessage = '灵气枯竭，闭关暂无收益。恢复灵气或升级阵法后可继续。'
+      } else if (dongfuStore.dongfu.lingqi <= 0 && !isRealmXiuweiFull(playerStore.player)) {
+        this.lastMessage = '灵气枯竭，修炼暂无收益。恢复灵气或升级阵法后可继续。'
+      }
+
+      if (isRealmXiuweiFull(playerStore.player)) {
+        this.finishIdle('当前境界修为已满，修炼已自动停止，请前往突破。')
       }
     },
 
-    /** 闭关 tick */
+    /** 修炼 tick */
     tickIdle() {
       this.applyCultivationElapsed()
     },
@@ -197,7 +226,7 @@ export const useGameStore = defineStore('game', {
         return { success: false, message: '调息或重伤期间无法突破。' }
       }
       if (this.isCultivationLocked) {
-        return { success: false, message: '闭关期间无法突破，请先结束闭关。' }
+        return { success: false, message: '修炼期间无法突破，请先结束修炼。' }
       }
 
       const playerStore = usePlayerStore()
@@ -334,7 +363,7 @@ export const useGameStore = defineStore('game', {
     startAutoExplore() {
       if (this.isRecoveryLocked) return
       if (this.isCultivationLocked) {
-        this.lastMessage = '闭关期间无法历练，请先结束闭关。'
+        this.lastMessage = '修炼期间无法历练，请先结束修炼。'
         return
       }
 
@@ -385,7 +414,10 @@ export const useGameStore = defineStore('game', {
 
       const playerStore = usePlayerStore()
       resetBattleLogCounter()
-      this.currentMonster = pickRandomMonster(map.monsters, map.drops)
+      const encounter = pickRandomMonster(map, playerStore.monsterTierPity)
+      this.currentMonster = encounter.monster
+      playerStore.monsterTierPity = encounter.pityState
+      playerStore.save()
       playerStore.setHp(playerStore.player.combat.maxHp)
       playerStore.setMp(playerStore.player.combat.maxMp)
       this.battleSkillState = resetBattleSkillState(playerStore.player)
@@ -438,7 +470,7 @@ export const useGameStore = defineStore('game', {
           result.skillProficiencyGains,
         )
         for (const levelUp of levelUps) {
-          this.pushSystemLog(levelUp.message)
+          this.pushSkillLog(levelUp.message)
         }
       }
 
@@ -495,6 +527,16 @@ export const useGameStore = defineStore('game', {
         id: `sys_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         text,
         type: 'system',
+        timestamp: Date.now(),
+      })
+    },
+
+    /** 追加技能熟练度 / 等级日志 */
+    pushSkillLog(text: string) {
+      this.battleLogs.push({
+        id: `skill_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        text,
+        type: 'skill',
         timestamp: Date.now(),
       })
     },

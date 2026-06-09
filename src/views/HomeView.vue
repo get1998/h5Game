@@ -5,6 +5,7 @@ import { useDongfuStore } from '@/stores/dongfu'
 import { useGameStore } from '@/stores/game'
 import { usePlayerStore } from '@/stores/player'
 import { calcCultivationRate, getLingqiCostPerXiuwei } from '@/game/systems/cultivation'
+import { isRealmXiuweiFull } from '@/game/constants/realm'
 
 const dongfuStore = useDongfuStore()
 const gameStore = useGameStore()
@@ -22,7 +23,10 @@ const cultivationDetail = computed(() =>
   ),
 )
 
+const isXiuweiFull = computed(() => isRealmXiuweiFull(playerStore.player))
+
 const cultivationRateText = computed(() => {
+  if (isXiuweiFull.value) return '修为已满，请先突破'
   const rate = cultivationDetail.value.totalPerSec
   return rate > 0 ? `${rate.toFixed(2)} 修为 / 秒` : '灵气不足或未装备功法'
 })
@@ -47,7 +51,7 @@ const lingqiCostPerXiuweiText = computed(() => {
 })
 
 const idleButtonText = computed(() =>
-  gameStore.idle.isRunning ? '结束闭关' : '开始闭关',
+  gameStore.idle.isRunning ? '结束修炼' : '开始修炼',
 )
 
 const idleButtonClass = computed(() =>
@@ -63,14 +67,17 @@ function toggleIdle() {
   }
 }
 
-const isIdleButtonDisabled = computed(() => gameStore.isRecoveryLocked)
+const isIdleButtonDisabled = computed(() =>
+  gameStore.isRecoveryLocked
+  || (!gameStore.idle.isRunning && isXiuweiFull.value),
+)
 </script>
 
 <template>
   <GameLayout>
     <header class="home-header">
       <h1 class="game-title">洞府</h1>
-      <p class="home-header__subtitle">闭关悟道 · 吸纳灵气</p>
+      <p class="home-header__subtitle">修炼悟道 · 吸纳灵气</p>
     </header>
 
     <section class="home-card game-card">
@@ -97,7 +104,7 @@ const isIdleButtonDisabled = computed(() => gameStore.isRecoveryLocked)
         <span class="stat-value">{{ dongfuInfo.recoveryPerSec.toFixed(1) }} / 秒</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">闭关聚灵</span>
+        <span class="stat-label">修炼聚灵</span>
         <span class="stat-value">
           {{ dongfuInfo.recoveryPerSecCultivating > 0
             ? `${dongfuInfo.recoveryPerSecCultivating.toFixed(1)} / 秒（阵法）`
@@ -117,23 +124,23 @@ const isIdleButtonDisabled = computed(() => gameStore.isRecoveryLocked)
         <span class="stat-value">每 1 点修为约需 {{ lingqiCostPerXiuweiText }}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">闭关速率</span>
+        <span class="stat-label">修炼速率</span>
         <span class="stat-value">{{ cultivationRateText }}</span>
       </div>
     </section>
 
     <section class="home-card game-card">
-      <div class="page-section-title">闭关</div>
+      <div class="page-section-title">修炼</div>
       <div class="stat-row">
         <span class="stat-label">状态</span>
         <span class="stat-value">{{ gameStore.idleStatusText }}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">累计闭关</span>
+        <span class="stat-label">累计修炼</span>
         <span class="stat-value">{{ gameStore.idle.accumulatedSeconds }} 秒</span>
       </div>
       <p v-if="gameStore.idle.isRunning" class="home-cultivation-hint">
-        闭关中，仅可查看洞府状态；结束闭关后方可前往其他界面。
+        修炼中，仅可查看洞府状态；结束修炼后方可前往其他界面。
       </p>
       <p v-if="gameStore.lastMessage" class="home-message">{{ gameStore.lastMessage }}</p>
       <button

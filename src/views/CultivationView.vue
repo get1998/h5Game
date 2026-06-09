@@ -74,9 +74,9 @@ function handleBreakthrough() {
     </section>
 
     <section class="cultivation-card game-card">
-      <div class="page-section-title">闭关说明</div>
+      <div class="page-section-title">修炼说明</div>
       <p class="cultivation-tip">
-        修为仅能通过洞府闭关获取。闭关消耗灵气转化修为，灵气由洞府等级恢复；闭关中仅阵法可持续聚灵。打怪可获得功法经验，不增加修为。
+        修为仅能通过洞府修炼获取。修炼消耗灵气转化修为，灵气由洞府等级恢复；修炼中仅阵法可持续聚灵。打怪可获得功法经验，不增加修为。当前境界修为满后将自动停止修炼，需先突破再继续。
       </p>
     </section>
   </GameLayout>

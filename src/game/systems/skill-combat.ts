@@ -1,20 +1,18 @@
-import {
-  calcFinalDamage,
-  calcHitRate,
-  rollCrit,
-  rollHit,
-} from '@/game/formulas/damage'
+import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import { appendElementHint, resolveAttack } from '@/game/systems/combat-resolve'
 import type { Gongfa } from '@/game/models/gongfa'
 import type { Monster } from '@/game/models/monster'
-import type { Player } from '@/game/models/player'
 import {
+  getScaledSkillParams,
+  getSkillDamageMultiplier,
+  getSkillHitCount,
   getSkillProficiency,
-  getSkillProficiencyCoefficient,
   getUnlockedSkills,
+  resolveSkillAttackElement,
   selectBestAttackSkill,
   type Skill,
 } from '@/game/models/skill'
-import type { BattleLogEntry } from '@/game/types'
+import type { BattleLogEntry, ElementType } from '@/game/types'
 
 /** 单场战斗技能运行时状态 */
 export interface BattleSkillState {
@@ -29,7 +27,7 @@ type LogFactory = (text: string, type: BattleLogEntry['type']) => BattleLogEntry
 /**
  * 创建战斗初始技能状态
  */
-export function createBattleSkillState(player: Player): BattleSkillState {
+export function createBattleSkillState(player: { combat: { mp: number } }): BattleSkillState {
   return {
     playerMp: player.combat.mp,
     skillCooldowns: {},
@@ -39,7 +37,7 @@ export function createBattleSkillState(player: Player): BattleSkillState {
 /**
  * 重置单场战斗技能状态（遇怪时调用，灵力回满）
  */
-export function resetBattleSkillState(player: Player): BattleSkillState {
+export function resetBattleSkillState(player: { combat: { maxMp: number } }): BattleSkillState {
   return {
     playerMp: player.combat.maxMp,
     skillCooldowns: {},
@@ -68,39 +66,52 @@ export function applySkillCast(state: BattleSkillState, skill: Skill): void {
   }
 }
 
-function getSkillHitCount(skill: Skill): number {
-  const params = skill.params
-  if (typeof params.hit_count === 'number' && params.hit_count > 0) {
-    return Math.floor(params.hit_count)
-  }
-  if (typeof params.skill_count === 'number' && params.skill_count > 0) {
-    return Math.floor(params.skill_count)
-  }
-  return 1
-}
-
-function getSkillDamageMultiplier(skill: Skill): number {
-  const percent = skill.params.damage_percent
-  return typeof percent === 'number' ? percent : 1
-}
-
-function getSkillExtraPenetration(skill: Skill, basePenetration: number): number {
-  const ignore = skill.params.defense_ignore
+function getSkillExtraPenetration(
+  skill: Skill,
+  basePenetration: number,
+  proficiency: number,
+): number {
+  const params = getScaledSkillParams(skill.params, proficiency)
+  const ignore = params.defense_ignore
   if (typeof ignore === 'number' && ignore > 0) {
     return basePenetration + ignore * 100
   }
-  const ignorePercent = skill.params.defense_ignore_percent
+  const ignorePercent = params.defense_ignore_percent
   if (typeof ignorePercent === 'number' && ignorePercent > 0) {
     return basePenetration + ignorePercent * 100
   }
   return basePenetration
 }
 
+function resolvePlayerAttackElement(
+  skill: Skill | null,
+  gongfa: Gongfa,
+  snapshot: CombatSnapshot,
+  targetElement: ElementType,
+): ElementType | undefined {
+  const fallback = snapshot.primaryAttackElement
+  if (skill) {
+    return resolveSkillAttackElement(skill, gongfa.elements, fallback, targetElement)
+  }
+  return fallback
+}
+
+function buildPlayerAttacker(snapshot: CombatSnapshot, penetration = snapshot.penetration) {
+  return {
+    attack: snapshot.attack,
+    critRate: snapshot.critRate,
+    critDamage: snapshot.critDamage,
+    penetration,
+    hitRate: snapshot.hitRate,
+    speed: snapshot.speed,
+  }
+}
+
 /**
  * 玩家回合：自动选择伤害最高的可释放攻击技能，否则普通攻击
  */
 export function executePlayerAttack(
-  player: Player,
+  snapshot: CombatSnapshot,
   monster: Monster,
   gongfa: Gongfa,
   skillState: BattleSkillState,
@@ -115,52 +126,56 @@ export function executePlayerAttack(
   const selectedSkill = selectBestAttackSkill(unlockedSkills, {
     playerMp: skillState.playerMp,
     skillCooldowns: skillState.skillCooldowns,
+    skillProficiency: gongfa.skillProficiency,
   })
 
-  const attack = player.combat.attack + gongfa.attackBonus
-  const playerHitRate = calcHitRate(
-    player.combat.hitRate,
-    player.combat.speed,
-    monster.combat.speed,
+  const attackElement = resolvePlayerAttackElement(
+    selectedSkill ?? null,
+    gongfa,
+    snapshot,
+    monster.element,
   )
+  const defender = {
+    defense: monster.combat.defense,
+    speed: monster.combat.speed,
+    element: monster.element,
+  }
 
   if (selectedSkill) {
     applySkillCast(skillState, selectedSkill)
     const hitCount = getSkillHitCount(selectedSkill)
     const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
-    const levelCoeff = getSkillProficiencyCoefficient(proficiency)
-    const skillMultiplier = getSkillDamageMultiplier(selectedSkill) * levelCoeff
-    const penetration = getSkillExtraPenetration(selectedSkill, player.combat.penetration)
+    const skillMultiplier = getSkillDamageMultiplier(selectedSkill, proficiency)
+    const penetration = getSkillExtraPenetration(selectedSkill, snapshot.penetration, proficiency)
 
-    logs.push(
-      createLog(`你施展「${selectedSkill.name}」！`, 'info'),
-    )
+    logs.push(createLog(`你施展「${selectedSkill.name}」！`, 'info'))
 
     for (let i = 0; i < hitCount; i += 1) {
       if (monsterHp <= 0) break
 
-      if (rollHit(playerHitRate)) {
-        const isCrit = rollCrit(player.combat.critRate)
-        const damage = calcFinalDamage({
-          attack,
-          skillMultiplier,
-          isCrit,
-          critDamage: player.combat.critDamage,
-          targetDefense: monster.combat.defense,
-          penetration,
-        })
-        monsterHp = Math.max(0, monsterHp - damage)
-        const hitLabel = hitCount > 1 ? `（第 ${i + 1} 击）` : ''
+      const result = resolveAttack({
+        source: 'gongfa_skill',
+        attacker: buildPlayerAttacker(snapshot, penetration),
+        defender,
+        attackElement,
+        skillMultiplier,
+      })
+
+      const hitLabel = hitCount > 1 ? `（第 ${i + 1} 击）` : ''
+      if (result.hit) {
+        monsterHp = Math.max(0, monsterHp - result.damage)
         logs.push(
           createLog(
-            isCrit
-              ? `「${selectedSkill.name}」暴击 ${damage} 点伤害！${hitLabel}`
-              : `「${selectedSkill.name}」造成 ${damage} 点伤害。${hitLabel}`,
-            isCrit ? 'crit' : 'damage',
+            appendElementHint(
+              result.isCrit
+                ? `「${selectedSkill.name}」暴击 ${result.damage} 点伤害！${hitLabel}`
+                : `「${selectedSkill.name}」造成 ${result.damage} 点伤害。${hitLabel}`,
+              result.elementHint,
+            ),
+            result.isCrit ? 'crit' : 'damage',
           ),
         )
       } else {
-        const hitLabel = hitCount > 1 ? `（第 ${i + 1} 击）` : ''
         logs.push(
           createLog(`${monster.name} 闪避了「${selectedSkill.name}」。${hitLabel}`, 'miss'),
         )
@@ -169,23 +184,24 @@ export function executePlayerAttack(
     return { logs, monsterHp, castSkillId: selectedSkill.id }
   }
 
-  // 无可用攻击技能时普通攻击
-  if (rollHit(playerHitRate)) {
-    const isCrit = rollCrit(player.combat.critRate)
-    const damage = calcFinalDamage({
-      attack,
-      isCrit,
-      critDamage: player.combat.critDamage,
-      targetDefense: monster.combat.defense,
-      penetration: player.combat.penetration,
-    })
-    monsterHp = Math.max(0, monsterHp - damage)
+  const result = resolveAttack({
+    source: 'normal',
+    attacker: buildPlayerAttacker(snapshot),
+    defender,
+    attackElement,
+  })
+
+  if (result.hit) {
+    monsterHp = Math.max(0, monsterHp - result.damage)
     logs.push(
       createLog(
-        isCrit
-          ? `你普通攻击暴击 ${damage} 点伤害！`
-          : `你普通攻击造成 ${damage} 点伤害。`,
-        isCrit ? 'crit' : 'damage',
+        appendElementHint(
+          result.isCrit
+            ? `你普通攻击暴击 ${result.damage} 点伤害！`
+            : `你普通攻击造成 ${result.damage} 点伤害。`,
+          result.elementHint,
+        ),
+        result.isCrit ? 'crit' : 'damage',
       ),
     )
   } else {
