@@ -5,10 +5,12 @@ import {
   getGongfaTemplate,
   type Gongfa,
 } from '@/game/models/gongfa'
+import type { SkillProficiencyLevelUpResult } from '@/game/formulas/skill-proficiency'
 import {
   addGongfaExp as applyGongfaExpGain,
   type GongfaLevelUpResult,
 } from '@/game/systems/gongfa'
+import { addSkillProficiencyBatch } from '@/game/systems/skill-proficiency'
 import { REAL_MS_PER_GAME_DAY } from '@/game/constants/time'
 import {
   advanceWorldTime,
@@ -178,6 +180,24 @@ export const usePlayerStore = defineStore('player', {
      * @param gongfaId 功法 id
      * @param expGain 经验增量
      */
+    /**
+     * 批量增加技能熟练度（战斗回合结算）
+     */
+    gainSkillProficiency(
+      gongfaId: string,
+      gains: Array<{ skillId: string; amount: number }>,
+    ): SkillProficiencyLevelUpResult[] {
+      const index = this.gongfaList.findIndex((g) => g.id === gongfaId)
+      if (index < 0 || gains.length === 0) return []
+
+      const gongfa = this.gongfaList[index]
+      const results = addSkillProficiencyBatch(gongfa, gains)
+      if (results.length > 0 || gains.some((item) => item.amount > 0)) {
+        this.gongfaList[index] = { ...gongfa }
+        this.save()
+      }
+      return results
+    },
     gainGongfaExp(gongfaId: string, expGain: number): GongfaLevelUpResult | null {
       const index = this.gongfaList.findIndex((g) => g.id === gongfaId)
       if (index < 0 || expGain <= 0) return null

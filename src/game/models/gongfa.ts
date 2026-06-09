@@ -1,3 +1,4 @@
+import type { SkillProficiencyMap } from '@/game/models/skill'
 import type { ElementType, GongfaQuality } from '@/game/types'
 
 /** 功法展示用五行（含多系/特殊） */
@@ -49,6 +50,8 @@ export interface Gongfa {
   permanentPassive: string
   /** 关联技能 id 列表（按解锁等级排序） */
   skillIds: string[]
+  /** 各技能熟练度（仅装备修炼时通过战斗使用增长） */
+  skillProficiency: SkillProficiencyMap
 }
 
 /** 功法配置模板（静态数据，用于创建功法实例） */
@@ -495,6 +498,7 @@ export function createGongfaFromTemplate(
     description: template.description,
     permanentPassive: template.permanentPassive,
     skillIds: [...template.skillIds],
+    skillProficiency: {},
     ...overrides,
   }
 }

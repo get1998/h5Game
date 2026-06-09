@@ -432,6 +432,16 @@ export const useGameStore = defineStore('game', {
       playerStore.setMp(result.playerMp)
       this.currentMonster.combat.hp = result.monsterHp
 
+      if (result.skillProficiencyGains.length > 0) {
+        const levelUps = playerStore.gainSkillProficiency(
+          gongfa.id,
+          result.skillProficiencyGains,
+        )
+        for (const levelUp of levelUps) {
+          this.pushSystemLog(levelUp.message)
+        }
+      }
+
       if (result.isFinished) {
         this.isBattling = false
         this.clearBattleTimers()

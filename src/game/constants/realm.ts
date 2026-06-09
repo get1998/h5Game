@@ -357,8 +357,25 @@ export function getRealmCultivationBase(realm: RealmStage): RealmCultivationBase
 }
 
 /**
+ * 获取境界在全局顺序中的索引（炼气一层 = 0）
+ */
+export function getRealmIndex(realm: RealmStage): number {
+  return REALM_ORDER.indexOf(realm)
+}
+
+/**
+ * 计算怪物境界相对玩家境界的差值（怪物索引 − 玩家索引）
+ * - 正值：怪物境界更高
+ * - 0：同境
+ * - 负值：怪物境界低于玩家
+ */
+export function getRealmDiff(playerRealm: RealmStage, monsterRealm: RealmStage): number {
+  return getRealmIndex(monsterRealm) - getRealmIndex(playerRealm)
+}
+
+/**
  * 判断当前境界是否达到要求
  */
 export function isRealmAtLeast(current: RealmStage, required: RealmStage): boolean {
-  return REALM_ORDER.indexOf(current) >= REALM_ORDER.indexOf(required)
+  return getRealmIndex(current) >= getRealmIndex(required)
 }

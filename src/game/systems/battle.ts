@@ -5,7 +5,9 @@ import {
   rollHit,
 } from '@/game/formulas/damage'
 import { calcGongfaExpGain } from '@/game/formulas/gongfa-exp'
+import { calcSkillProficiencyGain } from '@/game/formulas/skill-proficiency'
 import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
+import { getSkillById } from '@/game/models/skill'
 import type { Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
 import {
@@ -70,6 +72,12 @@ export function buildSevereInjuryMessage(): string {
   return '连续战败五次，陷入重伤昏迷，三分钟后方可苏醒。'
 }
 
+/** 本场战斗单技能熟练度增量 */
+export interface BattleSkillProficiencyGain {
+  skillId: string
+  amount: number
+}
+
 export interface BattleRoundResult {
   logs: BattleLogEntry[]
   playerHp: number
@@ -78,6 +86,8 @@ export interface BattleRoundResult {
   isFinished: boolean
   playerWin: boolean
   gongfaExpGain: number
+  /** 本回合技能熟练度增量（施展技能且怪物境界不低于玩家时才有） */
+  skillProficiencyGains: BattleSkillProficiencyGain[]
 }
 
 export type { BattleSkillState } from '@/game/systems/skill-combat'
@@ -121,6 +131,27 @@ export function runBattleRound(
   logs.push(...playerAttack.logs)
   monsterHp = playerAttack.monsterHp
 
+  const skillProficiencyGains: BattleSkillProficiencyGain[] = []
+  if (playerAttack.castSkillId) {
+    const proficiencyGain = calcSkillProficiencyGain({
+      playerRealm: player.realm,
+      monsterRealm: monster.realm,
+    })
+    if (proficiencyGain > 0) {
+      const castSkill = getSkillById(playerAttack.castSkillId)
+      skillProficiencyGains.push({
+        skillId: playerAttack.castSkillId,
+        amount: proficiencyGain,
+      })
+      logs.push(
+        createLog(
+          `「${castSkill?.name ?? playerAttack.castSkillId}」熟练度 +${proficiencyGain}。`,
+          'system',
+        ),
+      )
+    }
+  }
+
   if (monsterHp <= 0) {
     const gongfaExpGain = calcGongfaExpGain({
       monsterRealm: monster.realm,
@@ -140,6 +171,7 @@ export function runBattleRound(
       isFinished: true,
       playerWin: true,
       gongfaExpGain,
+      skillProficiencyGains,
     }
   }
 
@@ -183,6 +215,7 @@ export function runBattleRound(
     isFinished,
     playerWin: false,
     gongfaExpGain: 0,
+    skillProficiencyGains,
   }
 }
 

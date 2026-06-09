@@ -51,6 +51,7 @@ function normalizeGongfa(gongfa: Gongfa): Gongfa {
     maxLevel,
     exp: gongfa.exp ?? 0,
     expToNext: gongfa.expToNext ?? (level >= maxLevel ? 0 : calcExpToNextLevel(level)),
+    skillProficiency: gongfa.skillProficiency ?? {},
   }
 }
 

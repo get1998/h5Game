@@ -8,6 +8,8 @@ import type { Gongfa } from '@/game/models/gongfa'
 import type { Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
 import {
+  getSkillProficiency,
+  getSkillProficiencyCoefficient,
   getUnlockedSkills,
   selectBestAttackSkill,
   type Skill,
@@ -103,7 +105,7 @@ export function executePlayerAttack(
   gongfa: Gongfa,
   skillState: BattleSkillState,
   createLog: LogFactory,
-): { logs: BattleLogEntry[]; monsterHp: number } {
+): { logs: BattleLogEntry[]; monsterHp: number; castSkillId: string | null } {
   const logs: BattleLogEntry[] = []
   let monsterHp = monster.combat.hp
 
@@ -125,7 +127,9 @@ export function executePlayerAttack(
   if (selectedSkill) {
     applySkillCast(skillState, selectedSkill)
     const hitCount = getSkillHitCount(selectedSkill)
-    const skillMultiplier = getSkillDamageMultiplier(selectedSkill)
+    const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
+    const levelCoeff = getSkillProficiencyCoefficient(proficiency)
+    const skillMultiplier = getSkillDamageMultiplier(selectedSkill) * levelCoeff
     const penetration = getSkillExtraPenetration(selectedSkill, player.combat.penetration)
 
     logs.push(
@@ -162,7 +166,7 @@ export function executePlayerAttack(
         )
       }
     }
-    return { logs, monsterHp }
+    return { logs, monsterHp, castSkillId: selectedSkill.id }
   }
 
   // 无可用攻击技能时普通攻击
@@ -188,5 +192,5 @@ export function executePlayerAttack(
     logs.push(createLog(`${monster.name} 闪避了你的攻击。`, 'miss'))
   }
 
-  return { logs, monsterHp }
+  return { logs, monsterHp, castSkillId: null }
 }
