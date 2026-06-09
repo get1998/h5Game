@@ -1,0 +1,135 @@
+import { getRealmBaseStats, REALM_LIFESPAN } from '@/game/constants/realm'
+import type { ElementType, RealmStage, SpiritRootType } from '@/game/types'
+
+/** 玩家战斗属性 */
+export interface CombatStats {
+  /** 当前气血 */
+  hp: number
+  /** 气血上限 */
+  maxHp: number
+  /** 当前灵力 */
+  mp: number
+  /** 灵力上限 */
+  maxMp: number
+  /** 攻击力 */
+  attack: number
+  /** 防御力 */
+  defense: number
+  /** 出手速度 */
+  speed: number
+  /** 暴击率（小数，如 0.05 表示 5%） */
+  critRate: number
+  /** 暴击伤害倍率（如 1.5 表示 150%） */
+  critDamage: number
+  /** 命中率（小数） */
+  hitRate: number
+  /** 闪避率（小数） */
+  dodgeRate: number
+  /** 穿透，无视目标部分防御 */
+  penetration: number
+}
+
+/** 玩家特殊属性 */
+export interface SpecialStats {
+  /** 悟性，影响功法修炼效率 */
+  comprehension: number
+  /** 丹毒累积值，过高会影响服药效果 */
+  pillPoison: number
+  /** 因果值，影响奇遇与劫难触发 */
+  karma: number
+}
+
+/** 玩家实体 */
+export interface Player {
+  /** 角色姓名 */
+  name: string
+  /** 当前境界 */
+  realm: RealmStage
+  /** 灵根类型（单灵根 / 双灵根等） */
+  spiritRootType: SpiritRootType
+  /** 灵根五行属性列表 */
+  spiritRootElements: ElementType[]
+  /** 角色经历标题，如「山村猎户」 */
+  originTitle: string
+  /** 角色经历简介 */
+  originSummary: string
+  /** 当前年龄 */
+  age: number
+  /** 寿元上限 */
+  lifespan: number
+  /** 修为值，用于突破境界 */
+  xiuwei: number
+  /** 神识强度 */
+  shenshi: number
+  /** 肉身强度 */
+  bodyStrength: number
+  /** 战斗属性 */
+  combat: CombatStats
+  /** 特殊属性 */
+  special: SpecialStats
+}
+
+/**
+ * 将境界基础属性应用到玩家（突破时调用，气血/灵力回满）
+ */
+export function applyRealmBaseToPlayer(player: Player, realm: RealmStage): void {
+  const base = getRealmBaseStats(realm)
+
+  player.realm = realm
+  player.lifespan = REALM_LIFESPAN[realm]
+  player.shenshi = base.shenshi
+  player.bodyStrength = base.bodyStrength
+  player.combat = {
+    hp: base.maxHp,
+    maxHp: base.maxHp,
+    mp: base.maxMp,
+    maxMp: base.maxMp,
+    attack: base.attack,
+    defense: base.defense,
+    speed: base.speed,
+    critRate: base.critRate,
+    critDamage: base.critDamage,
+    hitRate: base.hitRate,
+    dodgeRate: base.dodgeRate,
+    penetration: base.penetration,
+  }
+}
+
+/** 创建新角色默认数据 */
+export function createDefaultPlayer(name = '无名修士'): Player {
+  const player: Player = {
+    name,
+    realm: '炼气一层',
+    spiritRootType: '单灵根',
+    spiritRootElements: ['火'],
+    originTitle: '',
+    originSummary: '',
+    age: 16,
+    lifespan: 100,
+    xiuwei: 0,
+    shenshi: 1,
+    bodyStrength: 1,
+    combat: {
+      hp: 100,
+      maxHp: 100,
+      mp: 50,
+      maxMp: 50,
+      attack: 10,
+      defense: 5,
+      speed: 10,
+      critRate: 0.05,
+      critDamage: 1.5,
+      hitRate: 0.9,
+      dodgeRate: 0.05,
+      penetration: 0,
+    },
+    special: {
+      comprehension: 10,
+      pillPoison: 0,
+      karma: 0,
+    },
+  }
+
+  applyRealmBaseToPlayer(player, '炼气一层')
+  return player
+}

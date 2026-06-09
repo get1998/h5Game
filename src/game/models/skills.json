@@ -1,0 +1,1193 @@
+{
+  "skills": [
+    {
+      "id": "qingmu_1",
+      "name": "青木生气",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每回合恢复0.5%气血",
+      "params": { "hp_regen_percent": 0.005 },
+      "source_gongfa_id": "gongfa_qingmu",
+      "source_gongfa": "青木长生功",
+      "min_level": 1
+    },
+    {
+      "id": "qingmu_2",
+      "name": "藤蔓缠绕",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 0,
+      "effect": "对单体造成100%木系伤害，并有25%概率减速目标10%速度，持续2回合",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "木",
+        "slow_chance": 0.25,
+        "slow_amount": 0.1,
+        "duration": 2
+      },
+      "source_gongfa_id": "gongfa_qingmu",
+      "source_gongfa": "青木长生功",
+      "min_level": 3
+    },
+    {
+      "id": "qingmu_3",
+      "name": "乙木回春",
+      "type": "active",
+      "cost_mp": 20,
+      "cooldown": 3,
+      "effect": "恢复自身15%气血",
+      "params": { "hp_regen_percent": 0.15 },
+      "source_gongfa_id": "gongfa_qingmu",
+      "source_gongfa": "青木长生功",
+      "min_level": 5
+    },
+    {
+      "id": "qingmu_4",
+      "name": "苍木护体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到攻击时10%概率恢复3%气血",
+      "params": { "on_hit_heal_chance": 0.1, "hp_regen_percent": 0.03 },
+      "source_gongfa_id": "gongfa_qingmu",
+      "source_gongfa": "青木长生功",
+      "min_level": 7
+    },
+    {
+      "id": "qingmu_5",
+      "name": "万古长青",
+      "type": "ultimate",
+      "cost_mp": 50,
+      "cooldown": 4,
+      "effect": "进入长青状态3回合：每回合恢复5%气血，防御+30%",
+      "params": {
+        "duration": 3,
+        "hp_regen_percent": 0.05,
+        "defense_bonus_percent": 0.3
+      },
+      "source_gongfa_id": "gongfa_qingmu",
+      "source_gongfa": "青木长生功",
+      "min_level": 10
+    },
+    {
+      "id": "ruijin_1",
+      "name": "金刃斩",
+      "type": "active",
+      "cost_mp": 12,
+      "cooldown": 0,
+      "effect": "对单体造成90%金系伤害",
+      "params": { "damage_percent": 0.9, "element": "金" },
+      "source_gongfa_id": "gongfa_ruijin",
+      "source_gongfa": "锐金诀",
+      "min_level": 1
+    },
+    {
+      "id": "ruijin_2",
+      "name": "锐金之势",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "金系技能伤害+5%",
+      "params": { "metal_damage_bonus": 0.05 },
+      "source_gongfa_id": "gongfa_ruijin",
+      "source_gongfa": "锐金诀",
+      "min_level": 3
+    },
+    {
+      "id": "ruijin_3",
+      "name": "断金击",
+      "type": "active",
+      "cost_mp": 18,
+      "cooldown": 1,
+      "effect": "对单体造成110%金系伤害，忽视目标5%防御",
+      "params": {
+        "damage_percent": 1.1,
+        "element": "金",
+        "defense_ignore": 0.05
+      },
+      "source_gongfa_id": "gongfa_ruijin",
+      "source_gongfa": "锐金诀",
+      "min_level": 5
+    },
+    {
+      "id": "ruijin_4",
+      "name": "铁骨",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "防御+5%",
+      "params": { "defense_bonus_percent": 0.05 },
+      "source_gongfa_id": "gongfa_ruijin",
+      "source_gongfa": "锐金诀",
+      "min_level": 7
+    },
+    {
+      "id": "ruijin_5",
+      "name": "金戈铁马",
+      "type": "ultimate",
+      "cost_mp": 40,
+      "cooldown": 4,
+      "effect": "对单体造成200%金系伤害",
+      "params": { "damage_percent": 2.0, "element": "金" },
+      "source_gongfa_id": "gongfa_ruijin",
+      "source_gongfa": "锐金诀",
+      "min_level": 10
+    },
+    {
+      "id": "chiyan_1",
+      "name": "火苗术",
+      "type": "active",
+      "cost_mp": 10,
+      "cooldown": 0,
+      "effect": "对单体造成85%火系伤害",
+      "params": { "damage_percent": 0.85, "element": "火" },
+      "source_gongfa_id": "gongfa_chiyan",
+      "source_gongfa": "赤炎诀",
+      "min_level": 1
+    },
+    {
+      "id": "chiyan_2",
+      "name": "余烬",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "火系技能伤害+4%",
+      "params": { "fire_damage_bonus": 0.04 },
+      "source_gongfa_id": "gongfa_chiyan",
+      "source_gongfa": "赤炎诀",
+      "min_level": 3
+    },
+    {
+      "id": "chiyan_3",
+      "name": "炎爆",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 1,
+      "effect": "对单体造成100%火系伤害",
+      "params": { "damage_percent": 1.0, "element": "火" },
+      "source_gongfa_id": "gongfa_chiyan",
+      "source_gongfa": "赤炎诀",
+      "min_level": 5
+    },
+    {
+      "id": "chiyan_4",
+      "name": "炽心",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "暴击率+2%",
+      "params": { "crit_rate_bonus": 0.02 },
+      "source_gongfa_id": "gongfa_chiyan",
+      "source_gongfa": "赤炎诀",
+      "min_level": 7
+    },
+    {
+      "id": "chiyan_5",
+      "name": "赤焰冲天",
+      "type": "ultimate",
+      "cost_mp": 35,
+      "cooldown": 4,
+      "effect": "对单体造成180%火系伤害，并附加灼烧2回合（每回合损失2%气血）",
+      "params": {
+        "damage_percent": 1.8,
+        "element": "火",
+        "burn_duration": 2,
+        "burn_hp_percent": 0.02
+      },
+      "source_gongfa_id": "gongfa_chiyan",
+      "source_gongfa": "赤炎诀",
+      "min_level": 10
+    },
+    {
+      "id": "runquan_1",
+      "name": "清泉润体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每回合恢复0.3%灵力",
+      "params": { "mp_regen_percent": 0.003 },
+      "source_gongfa_id": "gongfa_runquan",
+      "source_gongfa": "润泉诀",
+      "min_level": 1
+    },
+    {
+      "id": "runquan_2",
+      "name": "水箭",
+      "type": "active",
+      "cost_mp": 12,
+      "cooldown": 0,
+      "effect": "对单体造成80%水系伤害",
+      "params": { "damage_percent": 0.8, "element": "水" },
+      "source_gongfa_id": "gongfa_runquan",
+      "source_gongfa": "润泉诀",
+      "min_level": 3
+    },
+    {
+      "id": "runquan_3",
+      "name": "潺潺回流",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 2,
+      "effect": "恢复自身10%灵力",
+      "params": { "mp_regen_percent": 0.1 },
+      "source_gongfa_id": "gongfa_runquan",
+      "source_gongfa": "润泉诀",
+      "min_level": 5
+    },
+    {
+      "id": "runquan_4",
+      "name": "水镜护体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到伤害-3%",
+      "params": { "damage_reduction": 0.03 },
+      "source_gongfa_id": "gongfa_runquan",
+      "source_gongfa": "润泉诀",
+      "min_level": 7
+    },
+    {
+      "id": "runquan_5",
+      "name": "沧海一滴",
+      "type": "ultimate",
+      "cost_mp": 40,
+      "cooldown": 4,
+      "effect": "恢复自身20%气血和15%灵力",
+      "params": { "hp_regen_percent": 0.2, "mp_regen_percent": 0.15 },
+      "source_gongfa_id": "gongfa_runquan",
+      "source_gongfa": "润泉诀",
+      "min_level": 10
+    },
+    {
+      "id": "jiantu_1",
+      "name": "石肤",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "防御+5%",
+      "params": { "defense_bonus_percent": 0.05 },
+      "source_gongfa_id": "gongfa_jiantu",
+      "source_gongfa": "坚土诀",
+      "min_level": 1
+    },
+    {
+      "id": "jiantu_2",
+      "name": "土刺",
+      "type": "active",
+      "cost_mp": 12,
+      "cooldown": 0,
+      "effect": "对单体造成85%土系伤害，并有20%概率减速目标8%速度，持续2回合",
+      "params": {
+        "damage_percent": 0.85,
+        "element": "土",
+        "slow_chance": 0.2,
+        "slow_amount": 0.08,
+        "duration": 2
+      },
+      "source_gongfa_id": "gongfa_jiantu",
+      "source_gongfa": "坚土诀",
+      "min_level": 3
+    },
+    {
+      "id": "jiantu_3",
+      "name": "稳如泰山",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 3,
+      "effect": "提升自身防御15%，持续2回合",
+      "params": { "defense_bonus_percent": 0.15, "duration": 2 },
+      "source_gongfa_id": "gongfa_jiantu",
+      "source_gongfa": "坚土诀",
+      "min_level": 5
+    },
+    {
+      "id": "jiantu_4",
+      "name": "坚壁",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到物理伤害-3%",
+      "params": { "physical_damage_reduction": 0.03 },
+      "source_gongfa_id": "gongfa_jiantu",
+      "source_gongfa": "坚土诀",
+      "min_level": 7
+    },
+    {
+      "id": "jiantu_5",
+      "name": "山岳不动",
+      "type": "ultimate",
+      "cost_mp": 45,
+      "cooldown": 4,
+      "effect": "进入山岳状态3回合：防御+30%，每回合恢复3%气血",
+      "params": {
+        "duration": 3,
+        "defense_bonus_percent": 0.3,
+        "hp_regen_percent": 0.03
+      },
+      "source_gongfa_id": "gongfa_jiantu",
+      "source_gongfa": "坚土诀",
+      "min_level": 10
+    },
+    {
+      "id": "liehuo_1",
+      "name": "烈焰击",
+      "type": "active",
+      "cost_mp": 20,
+      "cooldown": 0,
+      "effect": "对单体造成120%火系伤害",
+      "params": { "damage_percent": 1.2, "element": "火" },
+      "source_gongfa_id": "gongfa_liehuo",
+      "source_gongfa": "烈火焚天诀",
+      "min_level": 1
+    },
+    {
+      "id": "liehuo_2",
+      "name": "焚天之势",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "火系技能伤害+8%",
+      "params": { "fire_damage_bonus": 0.08 },
+      "source_gongfa_id": "gongfa_liehuo",
+      "source_gongfa": "烈火焚天诀",
+      "min_level": 3
+    },
+    {
+      "id": "liehuo_3",
+      "name": "业火燎原",
+      "type": "active",
+      "cost_mp": 35,
+      "cooldown": 2,
+      "effect": "对全体敌人造成120%火系伤害",
+      "params": { "damage_percent": 1.2, "element": "火", "target": "all_enemies" },
+      "source_gongfa_id": "gongfa_liehuo",
+      "source_gongfa": "烈火焚天诀",
+      "min_level": 5
+    },
+    {
+      "id": "liehuo_4",
+      "name": "烈焰之心",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "暴击率+5%",
+      "params": { "crit_rate_bonus": 0.05 },
+      "source_gongfa_id": "gongfa_liehuo",
+      "source_gongfa": "烈火焚天诀",
+      "min_level": 7
+    },
+    {
+      "id": "liehuo_5",
+      "name": "焚天灭地",
+      "type": "ultimate",
+      "cost_mp": 80,
+      "cooldown": 3,
+      "effect": "对单体造成300%火系伤害，并附加灼烧3回合（每回合损失3%气血）",
+      "params": {
+        "damage_percent": 3.0,
+        "element": "火",
+        "burn_duration": 3,
+        "burn_hp_percent": 0.03
+      },
+      "source_gongfa_id": "gongfa_liehuo",
+      "source_gongfa": "烈火焚天诀",
+      "min_level": 10
+    },
+    {
+      "id": "houdu_1",
+      "name": "厚土甲",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 3,
+      "effect": "提升自身防御20%，持续2回合",
+      "params": { "defense_bonus_percent": 0.2, "duration": 2 },
+      "source_gongfa_id": "gongfa_houdu",
+      "source_gongfa": "厚土载物经",
+      "min_level": 1
+    },
+    {
+      "id": "houdu_2",
+      "name": "土牢禁锢",
+      "type": "active",
+      "cost_mp": 25,
+      "cooldown": 2,
+      "effect": "对单体造成90%土系伤害，减速15%并降低命中10%，持续2回合",
+      "params": {
+        "damage_percent": 0.9,
+        "element": "土",
+        "slow_amount": 0.15,
+        "hit_rate_reduction": 0.1,
+        "duration": 2
+      },
+      "source_gongfa_id": "gongfa_houdu",
+      "source_gongfa": "厚土载物经",
+      "min_level": 3
+    },
+    {
+      "id": "houdu_3",
+      "name": "大地守护",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到物理伤害-4%",
+      "params": { "physical_damage_reduction": 0.04 },
+      "source_gongfa_id": "gongfa_houdu",
+      "source_gongfa": "厚土载物经",
+      "min_level": 5
+    },
+    {
+      "id": "houdu_4",
+      "name": "厚德载物",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "气血上限+10%",
+      "params": { "max_hp_bonus_percent": 0.1 },
+      "source_gongfa_id": "gongfa_houdu",
+      "source_gongfa": "厚土载物经",
+      "min_level": 7
+    },
+    {
+      "id": "houdu_5",
+      "name": "山河倒悬",
+      "type": "ultimate",
+      "cost_mp": 60,
+      "cooldown": 4,
+      "effect": "对全体敌人造成150%土系伤害，30%概率眩晕1回合",
+      "params": {
+        "damage_percent": 1.5,
+        "element": "土",
+        "target": "all_enemies",
+        "stun_chance": 0.3,
+        "stun_duration": 1
+      },
+      "source_gongfa_id": "gongfa_houdu",
+      "source_gongfa": "厚土载物经",
+      "min_level": 10
+    },
+    {
+      "id": "jinfeng_1",
+      "name": "破虚剑气",
+      "type": "active",
+      "cost_mp": 25,
+      "cooldown": 0,
+      "effect": "对单体造成130%金系伤害，忽视目标12%防御",
+      "params": {
+        "damage_percent": 1.3,
+        "element": "金",
+        "defense_ignore": 0.12
+      },
+      "source_gongfa_id": "gongfa_jinfeng",
+      "source_gongfa": "金锋破虚剑典",
+      "min_level": 1
+    },
+    {
+      "id": "jinfeng_2",
+      "name": "金芒万道",
+      "type": "active",
+      "cost_mp": 30,
+      "cooldown": 1,
+      "effect": "连续造成2次60%金系伤害",
+      "params": { "damage_percent": 0.6, "element": "金", "hit_count": 2 },
+      "source_gongfa_id": "gongfa_jinfeng",
+      "source_gongfa": "金锋破虚剑典",
+      "min_level": 3
+    },
+    {
+      "id": "jinfeng_3",
+      "name": "剑意透骨",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "所有攻击忽视目标5%防御",
+      "params": { "global_defense_ignore": 0.05 },
+      "source_gongfa_id": "gongfa_jinfeng",
+      "source_gongfa": "金锋破虚剑典",
+      "min_level": 5
+    },
+    {
+      "id": "jinfeng_4",
+      "name": "锋锐之气",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "穿透+10",
+      "params": { "penetration_bonus": 10 },
+      "source_gongfa_id": "gongfa_jinfeng",
+      "source_gongfa": "金锋破虚剑典",
+      "min_level": 7
+    },
+    {
+      "id": "jinfeng_5",
+      "name": "一剑破虚空",
+      "type": "ultimate",
+      "cost_mp": 70,
+      "cooldown": 3,
+      "effect": "对单体造成250%金系伤害，无视40%防御",
+      "params": {
+        "damage_percent": 2.5,
+        "element": "金",
+        "defense_ignore": 0.4
+      },
+      "source_gongfa_id": "gongfa_jinfeng",
+      "source_gongfa": "金锋破虚剑典",
+      "min_level": 10
+    },
+    {
+      "id": "canglang_1",
+      "name": "沧浪水鞭",
+      "type": "active",
+      "cost_mp": 20,
+      "cooldown": 0,
+      "effect": "对单体造成110%水系伤害，并有30%概率减速目标10%速度，持续2回合",
+      "params": {
+        "damage_percent": 1.1,
+        "element": "水",
+        "slow_chance": 0.3,
+        "slow_amount": 0.1,
+        "duration": 2
+      },
+      "source_gongfa_id": "gongfa_canglang",
+      "source_gongfa": "沧浪覆海诀",
+      "min_level": 1
+    },
+    {
+      "id": "canglang_2",
+      "name": "怒涛连击",
+      "type": "active",
+      "cost_mp": 28,
+      "cooldown": 1,
+      "effect": "连续造成2次70%水系伤害",
+      "params": { "damage_percent": 0.7, "element": "水", "hit_count": 2 },
+      "source_gongfa_id": "gongfa_canglang",
+      "source_gongfa": "沧浪覆海诀",
+      "min_level": 3
+    },
+    {
+      "id": "canglang_3",
+      "name": "覆海之势",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "水系技能冷却-1回合",
+      "params": { "water_cooldown_reduce": 1 },
+      "source_gongfa_id": "gongfa_canglang",
+      "source_gongfa": "沧浪覆海诀",
+      "min_level": 5
+    },
+    {
+      "id": "canglang_4",
+      "name": "深海灵息",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每回合恢复2%灵力",
+      "params": { "mp_regen_percent": 0.02 },
+      "source_gongfa_id": "gongfa_canglang",
+      "source_gongfa": "沧浪覆海诀",
+      "min_level": 7
+    },
+    {
+      "id": "canglang_5",
+      "name": "覆海潮啸",
+      "type": "ultimate",
+      "cost_mp": 65,
+      "cooldown": 3,
+      "effect": "对全体敌人造成150%水系伤害，并降低全体敌人速度15%，持续2回合",
+      "params": {
+        "damage_percent": 1.5,
+        "element": "水",
+        "target": "all_enemies",
+        "slow_amount": 0.15,
+        "duration": 2
+      },
+      "source_gongfa_id": "gongfa_canglang",
+      "source_gongfa": "沧浪覆海诀",
+      "min_level": 10
+    },
+    {
+      "id": "hunyuan_1",
+      "name": "混元五行轮",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每次攻击附带自身最高五行攻击属性（自动选择克制目标的那一系）",
+      "params": { "auto_counter_element": true },
+      "source_gongfa_id": "gongfa_hunyuan",
+      "source_gongfa": "混元五行功",
+      "min_level": 1
+    },
+    {
+      "id": "hunyuan_2",
+      "name": "五行弹",
+      "type": "active",
+      "cost_mp": 25,
+      "cooldown": 0,
+      "effect": "对单体造成120%克制属性伤害",
+      "params": { "damage_percent": 1.2, "element": "auto_counter" },
+      "source_gongfa_id": "gongfa_hunyuan",
+      "source_gongfa": "混元五行功",
+      "min_level": 3
+    },
+    {
+      "id": "hunyuan_3",
+      "name": "双元术",
+      "type": "active",
+      "cost_mp": 40,
+      "cooldown": 2,
+      "effect": "同时释放两种已学会的五行技能（各造成80%伤害）",
+      "params": { "skill_count": 2, "damage_percent": 0.8 },
+      "source_gongfa_id": "gongfa_hunyuan",
+      "source_gongfa": "混元五行功",
+      "min_level": 5
+    },
+    {
+      "id": "hunyuan_4",
+      "name": "混元护体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "全属性抗性+5%",
+      "params": { "all_resistance_bonus": 0.05 },
+      "source_gongfa_id": "gongfa_hunyuan",
+      "source_gongfa": "混元五行功",
+      "min_level": 7
+    },
+    {
+      "id": "hunyuan_5",
+      "name": "五行大阵",
+      "type": "ultimate",
+      "cost_mp": 90,
+      "cooldown": 4,
+      "effect": "依次释放金木水火土五系攻击，每系造成80%伤害",
+      "params": {
+        "damage_percent": 0.8,
+        "elements": ["金", "木", "水", "火", "土"],
+        "hit_count": 5
+      },
+      "source_gongfa_id": "gongfa_hunyuan",
+      "source_gongfa": "混元五行功",
+      "min_level": 10
+    },
+    {
+      "id": "jiutian_1",
+      "name": "天雷击",
+      "type": "active",
+      "cost_mp": 30,
+      "cooldown": 0,
+      "effect": "对单体造成150%雷系（金火融合）伤害",
+      "params": { "damage_percent": 1.5, "element": "雷" },
+      "source_gongfa_id": "gongfa_jiutian",
+      "source_gongfa": "九天雷动真经",
+      "min_level": 1
+    },
+    {
+      "id": "jiutian_2",
+      "name": "雷动九天",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "雷系技能伤害+30%",
+      "params": { "thunder_damage_bonus": 0.3 },
+      "source_gongfa_id": "gongfa_jiutian",
+      "source_gongfa": "九天雷动真经",
+      "min_level": 3
+    },
+    {
+      "id": "jiutian_3",
+      "name": "雷链弹射",
+      "type": "active",
+      "cost_mp": 40,
+      "cooldown": 2,
+      "effect": "对主目标造成150%雷系伤害，弹射1个额外目标造成80%雷系伤害",
+      "params": {
+        "damage_percent": 1.5,
+        "element": "雷",
+        "chain_count": 1,
+        "chain_damage_percent": 0.8
+      },
+      "source_gongfa_id": "gongfa_jiutian",
+      "source_gongfa": "九天雷动真经",
+      "min_level": 5
+    },
+    {
+      "id": "jiutian_4",
+      "name": "雷体淬炼",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "速度+10",
+      "params": { "speed_bonus": 10 },
+      "source_gongfa_id": "gongfa_jiutian",
+      "source_gongfa": "九天雷动真经",
+      "min_level": 7
+    },
+    {
+      "id": "jiutian_5",
+      "name": "九天神雷",
+      "type": "ultimate",
+      "cost_mp": 85,
+      "cooldown": 3,
+      "effect": "对全体敌人造成200%雷系伤害，30%概率麻痹1回合",
+      "params": {
+        "damage_percent": 2.0,
+        "element": "雷",
+        "target": "all_enemies",
+        "paralyze_chance": 0.3,
+        "paralyze_duration": 1
+      },
+      "source_gongfa_id": "gongfa_jiutian",
+      "source_gongfa": "九天雷动真经",
+      "min_level": 10
+    },
+    {
+      "id": "taixu_1",
+      "name": "养神术",
+      "type": "active",
+      "cost_mp": 20,
+      "cooldown": 4,
+      "effect": "清除自身一个负面状态，并恢复10%灵力",
+      "params": { "mp_regen_percent": 0.1, "cleanse": 1 },
+      "source_gongfa_id": "gongfa_taixu",
+      "source_gongfa": "太虚养神秘录",
+      "min_level": 1
+    },
+    {
+      "id": "taixu_2",
+      "name": "凝神诀",
+      "type": "active",
+      "cost_mp": 15,
+      "cooldown": 3,
+      "effect": "恢复20%灵力，神识临时+20%，持续3回合",
+      "params": {
+        "mp_regen_percent": 0.2,
+        "shenshi_bonus_percent": 0.2,
+        "duration": 3
+      },
+      "source_gongfa_id": "gongfa_taixu",
+      "source_gongfa": "太虚养神秘录",
+      "min_level": 3
+    },
+    {
+      "id": "taixu_3",
+      "name": "悟道",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "修炼功法速度+30%（明面）",
+      "params": { "cultivation_speed_bonus": 0.3 },
+      "source_gongfa_id": "gongfa_taixu",
+      "source_gongfa": "太虚养神秘录",
+      "min_level": 5
+    },
+    {
+      "id": "taixu_4",
+      "name": "太虚冥冥",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "修炼功法速度额外+15%",
+      "params": { "cultivation_speed_bonus": 0.15 },
+      "source_gongfa_id": "gongfa_taixu",
+      "source_gongfa": "太虚养神秘录",
+      "min_level": 7
+    },
+    {
+      "id": "taixu_5",
+      "name": "养神归元",
+      "type": "ultimate",
+      "cost_mp": 60,
+      "cooldown": 5,
+      "effect": "清除全部负面状态，恢复50%灵力，3回合内免疫控制",
+      "params": {
+        "cleanse": -1,
+        "mp_regen_percent": 0.5,
+        "control_immunity_duration": 3
+      },
+      "source_gongfa_id": "gongfa_taixu",
+      "source_gongfa": "太虚养神秘录",
+      "min_level": 10
+    },
+    {
+      "id": "bumie_1",
+      "name": "霸体",
+      "type": "active",
+      "cost_mp": 40,
+      "cooldown": 5,
+      "effect": "进入霸体状态，防御+50%，韧性+30，持续3回合",
+      "params": {
+        "defense_bonus_percent": 0.5,
+        "tenacity_bonus": 30,
+        "duration": 3
+      },
+      "source_gongfa_id": "gongfa_bumie",
+      "source_gongfa": "不灭霸体玄功",
+      "min_level": 1
+    },
+    {
+      "id": "bumie_2",
+      "name": "怒拳碎岳",
+      "type": "active",
+      "cost_mp": 35,
+      "cooldown": 2,
+      "effect": "对单体造成180%金土融合物理伤害",
+      "params": { "damage_percent": 1.8, "element": "土", "damage_type": "physical" },
+      "source_gongfa_id": "gongfa_bumie",
+      "source_gongfa": "不灭霸体玄功",
+      "min_level": 3
+    },
+    {
+      "id": "bumie_3",
+      "name": "不灭战意",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "气血低于40%时，防御翻倍",
+      "params": { "hp_threshold": 0.4, "defense_multiplier": 2 },
+      "source_gongfa_id": "gongfa_bumie",
+      "source_gongfa": "不灭霸体玄功",
+      "min_level": 5
+    },
+    {
+      "id": "bumie_4",
+      "name": "铁骨铮铮",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到暴击伤害-20%",
+      "params": { "crit_damage_reduction": 0.2 },
+      "source_gongfa_id": "gongfa_bumie",
+      "source_gongfa": "不灭霸体玄功",
+      "min_level": 7
+    },
+    {
+      "id": "bumie_5",
+      "name": "不灭金身",
+      "type": "ultimate",
+      "cost_mp": 100,
+      "cooldown": 5,
+      "effect": "进入不灭金身状态5回合：减伤50%，每回合恢复5%气血",
+      "params": {
+        "duration": 5,
+        "damage_reduction": 0.5,
+        "hp_regen_percent": 0.05
+      },
+      "source_gongfa_id": "gongfa_bumie",
+      "source_gongfa": "不灭霸体玄功",
+      "min_level": 10
+    },
+    {
+      "id": "xingchen_1",
+      "name": "星辉护体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每提升1级功法，额外获得2点自由属性",
+      "params": { "free_stat_per_level": 2 },
+      "source_gongfa_id": "gongfa_xingchen",
+      "source_gongfa": "星辰炼神诀",
+      "min_level": 1
+    },
+    {
+      "id": "xingchen_2",
+      "name": "星辉引路",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "暴击率+8%",
+      "params": { "crit_rate_bonus": 0.08 },
+      "source_gongfa_id": "gongfa_xingchen",
+      "source_gongfa": "星辰炼神诀",
+      "min_level": 3
+    },
+    {
+      "id": "xingchen_3",
+      "name": "星河剑阵",
+      "type": "active",
+      "cost_mp": 45,
+      "cooldown": 2,
+      "effect": "连续造成3次50%无属性伤害",
+      "params": { "damage_percent": 0.5, "element": "无", "hit_count": 3 },
+      "source_gongfa_id": "gongfa_xingchen",
+      "source_gongfa": "星辰炼神诀",
+      "min_level": 5
+    },
+    {
+      "id": "xingchen_4",
+      "name": "陨星一击",
+      "type": "active",
+      "cost_mp": 60,
+      "cooldown": 3,
+      "effect": "对全体敌人造成200%无属性伤害",
+      "params": {
+        "damage_percent": 2.0,
+        "target": "all_enemies",
+        "element": "无"
+      },
+      "source_gongfa_id": "gongfa_xingchen",
+      "source_gongfa": "星辰炼神诀",
+      "min_level": 7
+    },
+    {
+      "id": "xingchen_5",
+      "name": "炼神大成",
+      "type": "ultimate",
+      "cost_mp": 120,
+      "cooldown": 4,
+      "effect": "进入炼神状态3回合：全属性+50%，暴击伤害+50%",
+      "params": {
+        "duration": 3,
+        "all_stat_bonus": 0.5,
+        "crit_damage_bonus": 0.5
+      },
+      "source_gongfa_id": "gongfa_xingchen",
+      "source_gongfa": "星辰炼神诀",
+      "min_level": 10
+    },
+    {
+      "id": "taigu_1",
+      "name": "造化之握",
+      "type": "active",
+      "cost_mp": 50,
+      "cooldown": 2,
+      "effect": "对单体造成180%五行轮回伤害（取克制目标的那一系）",
+      "params": { "damage_percent": 1.8, "element": "五行轮回" },
+      "source_gongfa_id": "gongfa_taigu",
+      "source_gongfa": "太古造化诀",
+      "min_level": 1
+    },
+    {
+      "id": "taigu_2",
+      "name": "造化玄机",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "全属性+5%",
+      "params": { "all_stat_bonus": 0.05 },
+      "source_gongfa_id": "gongfa_taigu",
+      "source_gongfa": "太古造化诀",
+      "min_level": 3
+    },
+    {
+      "id": "taigu_3",
+      "name": "轮回领域",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "技能栏+2，可装备两个主动技能",
+      "params": { "extra_skill_slots": 2 },
+      "source_gongfa_id": "gongfa_taigu",
+      "source_gongfa": "太古造化诀",
+      "min_level": 5
+    },
+    {
+      "id": "taigu_4",
+      "name": "万法归一",
+      "type": "active",
+      "cost_mp": 70,
+      "cooldown": 3,
+      "effect": "随机五行属性造成200%伤害",
+      "params": { "damage_percent": 2.0, "element": "random_wuxing" },
+      "source_gongfa_id": "gongfa_taigu",
+      "source_gongfa": "太古造化诀",
+      "min_level": 7
+    },
+    {
+      "id": "taigu_5",
+      "name": "开天造化",
+      "type": "ultimate",
+      "cost_mp": 150,
+      "cooldown": 5,
+      "effect": "造化状态3回合：技能栏+1，全属性+30%，技能冷却-1",
+      "params": {
+        "duration": 3,
+        "extra_skill_slots": 1,
+        "all_stat_bonus": 0.3,
+        "cooldown_reduce": 1
+      },
+      "source_gongfa_id": "gongfa_taigu",
+      "source_gongfa": "太古造化诀",
+      "min_level": 10
+    },
+    {
+      "id": "wuxingguiyuan_1",
+      "name": "五行轮转",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "每次攻击附带自身最高五行攻击属性（自动选择克制目标的那一系）",
+      "params": { "auto_counter_element": true },
+      "source_gongfa_id": "gongfa_wuxingguiyuan",
+      "source_gongfa": "五行归元诀",
+      "min_level": 1
+    },
+    {
+      "id": "wuxingguiyuan_2",
+      "name": "相生疗愈",
+      "type": "active",
+      "cost_mp": 50,
+      "cooldown": 3,
+      "effect": "恢复20%气血，并清除一个负面状态",
+      "params": { "hp_regen_percent": 0.2, "cleanse": 1 },
+      "source_gongfa_id": "gongfa_wuxingguiyuan",
+      "source_gongfa": "五行归元诀",
+      "min_level": 3
+    },
+    {
+      "id": "wuxingguiyuan_3",
+      "name": "五行护体",
+      "type": "passive",
+      "cost_mp": 0,
+      "cooldown": 0,
+      "effect": "受到攻击时，若该攻击属性被自身某属性克制，则减伤30%",
+      "params": { "counter_damage_reduction": 0.3 },
+      "source_gongfa_id": "gongfa_wuxingguiyuan",
+      "source_gongfa": "五行归元诀",
+      "min_level": 5
+    },
+    {
+      "id": "wuxingguiyuan_4",
+      "name": "归元一击",
+      "type": "active",
+      "cost_mp": 100,
+      "cooldown": 2,
+      "effect": "对目标造成五系混合伤害，总伤害 = 各系攻击之和 × 1.5，无视50%防御",
+      "params": {
+        "damage_formula": "sum_of_all_elemental_attack * 1.5",
+        "defense_ignore": 0.5
+      },
+      "source_gongfa_id": "gongfa_wuxingguiyuan",
+      "source_gongfa": "五行归元诀",
+      "min_level": 7
+    },
+    {
+      "id": "wuxingguiyuan_5",
+      "name": "五行归宗",
+      "type": "ultimate",
+      "cost_mp": 200,
+      "cooldown": 3,
+      "effect": "归元状态3回合：全属性+100%，每回合回血10%、回灵10%，技能无冷却；状态结束后虚弱1回合（攻击-50%）",
+      "params": {
+        "duration": 3,
+        "all_stat_bonus": 1.0,
+        "hp_regen_percent": 0.1,
+        "mp_regen_percent": 0.1,
+        "no_cooldown": true,
+        "weakness_duration": 1,
+        "weakness_attack_reduction": 0.5
+      },
+      "source_gongfa_id": "gongfa_wuxingguiyuan",
+      "source_gongfa": "五行归元诀",
+      "min_level": 10
+    },
+    {
+      "id": "monster_wolf_1",
+      "name": "裂风撕咬",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%木系伤害，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "木",
+        "cost_mp_percent": 1.0,
+        "beast_kind": "妖兽"
+      },
+      "source_gongfa_id": "monster_wolf",
+      "source_gongfa": "野狼",
+      "min_level": 1
+    },
+    {
+      "id": "monster_rabbit_1",
+      "name": "疾影蹬踢",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%木系伤害，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "木",
+        "cost_mp_percent": 1.0,
+        "beast_kind": "妖兽"
+      },
+      "source_gongfa_id": "monster_rabbit",
+      "source_gongfa": "妖兔",
+      "min_level": 1
+    },
+    {
+      "id": "monster_spider_1",
+      "name": "雾丝缠绕",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%水系伤害，并有30%概率减速目标10%速度，持续2回合，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "水",
+        "slow_chance": 0.3,
+        "slow_amount": 0.1,
+        "duration": 2,
+        "cost_mp_percent": 1.0,
+        "beast_kind": "妖兽"
+      },
+      "source_gongfa_id": "monster_spider",
+      "source_gongfa": "雾影蛛",
+      "min_level": 1
+    },
+    {
+      "id": "monster_ghost_1",
+      "name": "幽林魅影",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%木系伤害，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "木",
+        "cost_mp_percent": 1.0,
+        "beast_kind": "灵兽"
+      },
+      "source_gongfa_id": "monster_ghost",
+      "source_gongfa": "林魅",
+      "min_level": 1
+    },
+    {
+      "id": "monster_salamander_1",
+      "name": "地火喷吐",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%火系伤害，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "火",
+        "cost_mp_percent": 1.0,
+        "beast_kind": "妖兽"
+      },
+      "source_gongfa_id": "monster_salamander",
+      "source_gongfa": "火蜥蜴",
+      "min_level": 1
+    },
+    {
+      "id": "monster_scorpion_1",
+      "name": "赤尾毒刺",
+      "type": "active",
+      "cost_mp": 0,
+      "cooldown": 2,
+      "effect": "对单体造成100%火系伤害，并有20%概率使目标中毒，每回合损失2%气血，持续3回合，消耗100%灵力",
+      "params": {
+        "damage_percent": 1.0,
+        "element": "火",
+        "poison_chance": 0.2,
+        "poison_damage_percent": 0.02,
+        "duration": 3,
+        "cost_mp_percent": 1.0,
+        "beast_kind": "妖兽"
+      },
+      "source_gongfa_id": "monster_scorpion",
+      "source_gongfa": "赤尾蝎",
+      "min_level": 1
+    }
+  ]
+}

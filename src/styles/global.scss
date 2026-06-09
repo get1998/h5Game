@@ -1,0 +1,116 @@
+@use './variables.scss' as *;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: $color-bg;
+  color: $color-text;
+  font-family: $font-body;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  height: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.game-title {
+  font-family: $font-title;
+  color: $color-primary;
+  letter-spacing: 0.1em;
+}
+
+.game-card {
+  background: $color-bg-card;
+  border: 1px solid $color-border;
+  border-radius: $radius-md;
+  padding: 16px;
+}
+
+.game-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: $radius-sm;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+
+.game-btn--primary {
+  background: linear-gradient(135deg, $color-primary, $color-primary-dim);
+  color: #1a1a1a;
+}
+
+.game-btn--secondary {
+  background: $color-bg-elevated;
+  color: $color-text;
+  border: 1px solid $color-border;
+}
+
+.game-btn--danger {
+  background: $color-danger;
+  color: #fff;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba($color-border, 0.5);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.stat-label {
+  color: $color-text-muted;
+}
+
+.stat-value {
+  color: $color-text;
+  font-weight: 500;
+}
+
+.page-section-title {
+  font-family: $font-title;
+  font-size: 16px;
+  color: $color-primary;
+  margin-bottom: 12px;
+}
