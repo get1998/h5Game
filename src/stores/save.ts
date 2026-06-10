@@ -5,8 +5,30 @@ import {
   createDefaultMonsterTierPityState,
   type MonsterTierPityState,
 } from '@/game/models/monster'
-import { createDefaultPlayer, resyncPlayerRealmStats, type Player } from '@/game/models/player'
+import {
+  applyRealmBaseToPlayer,
+  createDefaultPlayer,
+  resyncPlayerCultivationStats,
+  resyncPlayerRealmStats,
+  type Player,
+} from '@/game/models/player'
+import { Reincarnation } from '@/game/models/reincarnation'
 import { normalizeRealm } from '@/game/constants/realm'
+import {
+  createDefaultReincarnationState,
+  type ReincarnationState,
+} from '@/game/models/reincarnation'
+import {
+  createDefaultAchievementState,
+  type AchievementState,
+} from '@/game/models/achievement'
+import { createDefaultTitleState, type TitleState } from '@/game/models/title'
+import {
+  createDefaultInventory,
+  normalizeInventory,
+  type InventoryState,
+} from '@/game/models/item'
+import { createDefaultMarketState, normalizeMarketState, type MarketState } from '@/game/models/market'
 import { createInitialWorldTime, type WorldTime } from '@/game/systems/time'
 import type { IdleState } from '@/game/types'
 
@@ -22,6 +44,16 @@ export interface GameSaveData {
   idle: IdleState
   /** 怪物品阶保底计数 */
   monsterTierPity: MonsterTierPityState
+  /** 多世轮回状态 */
+  reincarnation: ReincarnationState
+  /** 成就进度 */
+  achievements: AchievementState
+  /** 称号状态 */
+  titles: TitleState
+  /** 背包与灵石 */
+  inventory: InventoryState
+  /** 坊市稀世寄售 */
+  market: MarketState
 }
 
 /** 创建默认闭关状态 */
@@ -34,17 +66,38 @@ export function createDefaultIdleState(): IdleState {
   }
 }
 
+/** 读档后按主修功法重算境界战斗基础（保留气血/灵力比例） */
+function resyncPlayerCombatOnLoad(
+  player: Player,
+  gongfa: Gongfa | undefined,
+  reincarnation: ReincarnationState,
+): void {
+  resyncPlayerRealmStats(player, {
+    gongfa,
+    resetCombat: true,
+    preserveResourceRatio: true,
+  })
+  Reincarnation.fromState(reincarnation).applyToPlayer(player)
+}
+
 /** 创建默认存档 */
 export function createDefaultGameSave(): GameSaveData {
   const starter = createStarterGongfa()
+  const player = createDefaultPlayer()
+  applyRealmBaseToPlayer(player, player.realm, starter)
   return {
-    player: createDefaultPlayer(),
+    player,
     activeGongfaId: starter.id,
     gongfaList: [starter],
     worldTime: createInitialWorldTime(),
     dongfu: createDefaultDongfu(),
     idle: createDefaultIdleState(),
     monsterTierPity: createDefaultMonsterTierPityState(),
+    reincarnation: createDefaultReincarnationState(),
+    achievements: createDefaultAchievementState(),
+    titles: createDefaultTitleState(),
+    inventory: createDefaultInventory(),
+    market: createDefaultMarketState(),
   }
 }
 
@@ -65,25 +118,44 @@ function normalizeGongfa(gongfa: Gongfa): Gongfa {
   return normalized
 }
 
-/** 规范化玩家数据（兼容旧版本字段，并按最新境界表重算基础属性） */
+/** 规范化玩家数据（兼容旧版本字段，修炼属性随境界表同步） */
 function normalizePlayer(player: Player): Player {
   const normalized: Player = {
     ...player,
     realm: normalizeRealm(player.realm),
     originTitle: player.originTitle ?? '',
     originSummary: player.originSummary ?? '',
+    cultivation: player.cultivation ?? { absorptionRate: 4, conversionRate: 0.46 },
+    breakthroughFailures: player.breakthroughFailures ?? 0,
   }
-  // 怪物遇敌时实时读取境界表，玩家属性存于存档，需在读档时同步
-  resyncPlayerRealmStats(normalized, { preserveResourceRatio: true })
+  // 修炼属性随境界表同步；战斗属性仅在突破时按功法增幅重算，读档不覆盖
+  resyncPlayerCultivationStats(normalized)
   return normalized
 }
 
 /** 规范化存档数据（兼容旧版本字段） */
 export function normalizeSaveData(data: GameSaveData): GameSaveData {
+  const gongfaList = (data.gongfaList ?? []).map(normalizeGongfa)
+  const reincarnation = {
+    ...createDefaultReincarnationState(),
+    ...data.reincarnation,
+    combat: {
+      ...createDefaultReincarnationState().combat,
+      ...data.reincarnation?.combat,
+    },
+    cultivation: {
+      ...createDefaultReincarnationState().cultivation,
+      ...data.reincarnation?.cultivation,
+    },
+  }
+  const player = normalizePlayer(data.player)
+  const activeGongfa = gongfaList.find((g) => g.id === data.activeGongfaId)
+  resyncPlayerCombatOnLoad(player, activeGongfa, reincarnation)
+
   return {
     ...data,
-    player: normalizePlayer(data.player),
-    gongfaList: (data.gongfaList ?? []).map(normalizeGongfa),
+    player,
+    gongfaList,
     worldTime: data.worldTime ?? createInitialWorldTime(),
     dongfu: normalizeDongfu(data.dongfu),
     idle: {
@@ -95,6 +167,23 @@ export function normalizeSaveData(data: GameSaveData): GameSaveData {
       ...createDefaultMonsterTierPityState(),
       ...data.monsterTierPity,
     },
+    reincarnation,
+    achievements: {
+      ...createDefaultAchievementState(),
+      ...data.achievements,
+      counters: {
+        ...createDefaultAchievementState().counters,
+        ...data.achievements?.counters,
+      },
+      records: data.achievements?.records ?? {},
+    },
+    titles: {
+      ...createDefaultTitleState(),
+      ...data.titles,
+      unlockedTitleIds: data.titles?.unlockedTitleIds ?? [],
+    },
+    inventory: normalizeInventory(data.inventory),
+    market: normalizeMarketState(data.market),
   }
 }
 

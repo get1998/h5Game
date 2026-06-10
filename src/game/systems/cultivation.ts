@@ -1,15 +1,21 @@
+import { BREAKTHROUGH_FAILURE_XIUWEI_LOSS_RATE } from '@/game/constants/breakthrough'
 import {
   REALM_BREAKTHROUGH_XIUWEI,
-  REALM_ORDER,
-  getRealmCultivationBase,
   getRealmXiuweiRoom,
 } from '@/game/constants/realm'
+import {
+  calcBreakthroughSuccessRate,
+  rollBreakthroughSuccess,
+  type BreakthroughSuccessRateDetail,
+} from '@/game/formulas/breakthrough-success'
+import { isRealmXiuweiFull } from '@/game/constants/realm'
 import {
   getElementHiddenMultiplier,
   getSpiritRootAdaptMultiplier,
 } from '@/game/formulas/gongfa-exp'
 import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
 import type { Dongfu } from '@/game/models/dongfu'
+import type { ReincarnationCultivationBonus } from '@/game/models/reincarnation'
 import type { Player } from '@/game/models/player'
 import type { RealmStage } from '@/game/types'
 import {
@@ -51,8 +57,11 @@ export function calcCultivationRate(
   player: Player,
   _dongfu: Dongfu,
   gongfa: Gongfa | undefined,
+  reincarnationCultivation?: ReincarnationCultivationBonus | null,
 ): CultivationRateInfo {
-  const { absorptionRate, conversionRate } = getRealmCultivationBase(player.realm)
+  const bonus = reincarnationCultivation ?? { absorptionRate: 0, conversionRate: 0 }
+  const absorptionRate = player.cultivation.absorptionRate + bonus.absorptionRate
+  const conversionRate = player.cultivation.conversionRate + bonus.conversionRate
 
   if (!gongfa) {
     return {
@@ -104,6 +113,7 @@ export function calcIdleXiuwei(
   elapsedSeconds: number,
   xiuweiRemainder = 0,
   now = Date.now(),
+  reincarnationCultivation?: ReincarnationCultivationBonus | null,
 ): CultivationTickResult {
   if (elapsedSeconds <= 0) {
     return {
@@ -131,7 +141,7 @@ export function calcIdleXiuwei(
     }
   }
 
-  const rate = calcCultivationRate(player, workingDongfu, gongfa)
+  const rate = calcCultivationRate(player, workingDongfu, gongfa, reincarnationCultivation)
   const maxAbsorb = rate.absorptionPerSec * elapsedSeconds
   const absorption = absorbLingqiForCultivation(
     workingDongfu,
@@ -172,15 +182,65 @@ export function calcIdleXiuwei(
 }
 
 /**
- * 尝试突破境界
+ * 是否满足小境界自动突破条件（修为已满且下一境仍属同一大境界）
  */
-export function tryBreakthrough(player: Player): {
+export function canAutoMinorBreakthrough(
+  player: Player,
+  gongfa: Gongfa | undefined,
+): boolean {
+  if (!isRealmXiuweiFull(player)) return false
+
+  const rateDetail = calcBreakthroughSuccessRate(
+    player,
+    gongfa,
+    player.breakthroughFailures,
+  )
+  return rateDetail.nextRealm != null && !rateDetail.isMajorBreakthrough
+}
+
+/**
+ * 读取小境界自动突破的成功率明细（未满足条件时返回 null）
+ */
+export function getAutoMinorBreakthroughDetail(
+  player: Player,
+  gongfa: Gongfa | undefined,
+): BreakthroughSuccessRateDetail | null {
+  if (!canAutoMinorBreakthrough(player, gongfa)) return null
+
+  return calcBreakthroughSuccessRate(
+    player,
+    gongfa,
+    player.breakthroughFailures,
+  )
+}
+
+/** 突破尝试结果 */
+export interface BreakthroughAttemptResult {
   success: boolean
   newRealm?: RealmStage
   message: string
-} {
-  const currentIndex = REALM_ORDER.indexOf(player.realm)
-  if (currentIndex >= REALM_ORDER.length - 1) {
+  /** 是否进行了成功率掷骰（修为满且非顶境） */
+  rolled?: boolean
+  /** 本次成功率 */
+  successRate?: number
+  /** 失败时损失的修为 */
+  xiuweiLoss?: number
+}
+
+/**
+ * 尝试突破境界（含成功率掷骰）
+ */
+export function tryBreakthrough(
+  player: Player,
+  gongfa: Gongfa | undefined,
+): BreakthroughAttemptResult {
+  const rateDetail = calcBreakthroughSuccessRate(
+    player,
+    gongfa,
+    player.breakthroughFailures,
+  )
+
+  if (!rateDetail.nextRealm) {
     return { success: false, message: '已达当前版本最高境界。' }
   }
 
@@ -192,11 +252,28 @@ export function tryBreakthrough(player: Player): {
     }
   }
 
-  const newRealm = REALM_ORDER[currentIndex + 1]
+  const rolled = rollBreakthroughSuccess(rateDetail.rate)
+  if (rolled) {
+    return {
+      success: true,
+      newRealm: rateDetail.nextRealm,
+      message: `突破成功！晋升 ${rateDetail.nextRealm}！（成功率 ${rateDetail.percent}%）`,
+      rolled: true,
+      successRate: rateDetail.rate,
+    }
+  }
+
+  const xiuweiLoss = Math.max(
+    1,
+    Math.floor(required * BREAKTHROUGH_FAILURE_XIUWEI_LOSS_RATE),
+  )
+
   return {
-    success: true,
-    newRealm,
-    message: `突破成功！晋升 ${newRealm}！`,
+    success: false,
+    message: `突破失败，天地灵气反噬，损失修为 ${xiuweiLoss} 点。（成功率 ${rateDetail.percent}%）`,
+    rolled: true,
+    successRate: rateDetail.rate,
+    xiuweiLoss,
   }
 }
 
@@ -207,8 +284,9 @@ export function getLingqiCostPerXiuwei(
   player: Player,
   dongfu: Dongfu,
   gongfa: Gongfa | undefined,
+  reincarnationCultivation?: ReincarnationCultivationBonus | null,
 ): number {
-  const rate = calcCultivationRate(player, dongfu, gongfa)
+  const rate = calcCultivationRate(player, dongfu, gongfa, reincarnationCultivation)
   if (rate.conversionPerLingqi <= 0) return 0
   return Number((1 / rate.conversionPerLingqi).toFixed(2))
 }

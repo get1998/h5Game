@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import type { BattleLogEntry, IdleState } from '@/game/types'
-import { calcCultivationRate, calcIdleXiuwei, tryBreakthrough } from '@/game/systems/cultivation'
+import {
+  calcCultivationRate,
+  calcIdleXiuwei,
+  canAutoMinorBreakthrough,
+  tryBreakthrough,
+  type BreakthroughAttemptResult,
+} from '@/game/systems/cultivation'
 import { calcLingqiRecoveryPerSec } from '@/game/systems/lingqi'
 import {
   buildRestingMessage,
@@ -8,10 +14,17 @@ import {
   calcRestDurationMs,
   calcSevereInjuryDurationMs,
   MAX_CONSECUTIVE_REST_COUNT,
+  REST_LIFESPAN_PENALTY_YEARS,
+  createPlayerBattleDebuffs,
   resetBattleLogCounter,
+  resetBattleMonsterSkillState,
   resetBattleSkillState,
   runBattleRound,
+  SEVERE_INJURY_LIFESPAN_PENALTY_YEARS,
+  shouldApplyRestLifespanPenalty,
+  type BattleMonsterSkillState,
   type BattleSkillState,
+  type PlayerBattleDebuffs,
   type RecoveryPhase,
 } from '@/game/systems/battle'
 import {
@@ -20,11 +33,18 @@ import {
   type TrainingMap,
 } from '@/game/constants/maps'
 import { isRealmAtLeast, isRealmXiuweiFull } from '@/game/constants/realm'
-import { pickRandomMonster, type Monster } from '@/game/models/monster'
+import {
+  getMonsterStatusEncounterHint,
+  pickRandomMonster,
+  type Monster,
+} from '@/game/models/monster'
 import {
   getTierLootMultiplier,
   rollMapLoot,
 } from '@/game/systems/map-loot'
+import { calcBattleLingshiReward } from '@/game/formulas/battle-lingshi'
+import { getItemDefinition } from '@/game/constants/items'
+import { rollDongfuTreasureDrop } from '@/game/systems/dongfu-treasure-loot'
 import { usePlayerStore } from '@/stores/player'
 import { useDongfuStore } from '@/stores/dongfu'
 
@@ -52,6 +72,8 @@ export const useGameStore = defineStore('game', {
     recoveryRemainingMs: 0,
     recoveryTimer: null as ReturnType<typeof setTimeout> | null,
     battleSkillState: null as BattleSkillState | null,
+    battleMonsterSkillState: null as BattleMonsterSkillState | null,
+    battlePlayerDebuffs: null as PlayerBattleDebuffs | null,
   }),
   getters: {
     /** 调息或重伤期间锁定全页操作 */
@@ -75,6 +97,7 @@ export const useGameStore = defineStore('game', {
         playerStore.player,
         dongfuStore.dongfu,
         playerStore.activeGongfa,
+        playerStore.reincarnation.cultivation,
       ).totalPerSec
     },
     currentMap(state): TrainingMap | undefined {
@@ -94,16 +117,33 @@ export const useGameStore = defineStore('game', {
     },
   },
   actions: {
-    /** 从玩家存档同步修炼状态（进入游戏时调用） */
+    /** 从玩家存档同步修炼状态（进入游戏时调用，不把离线间隔结算为修炼收益） */
     resumeCultivation() {
       if (this.cultivationResumed) return
       this.cultivationResumed = true
+      this.restartIdleTimerIfNeeded()
+    },
 
+    /** 暂停修炼 tick（关闭标签/浏览器或离开游戏前调用，先结算在线时段） */
+    pauseIdleTimer() {
       const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
 
       this.applyCultivationElapsed()
+      this.clearIdleTimer()
+    },
+
+    /** 恢复修炼 tick（重新进入游戏时重置锚点，不结算关页间隔） */
+    restartIdleTimerIfNeeded() {
+      const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
+
+      this.clearIdleTimer()
+      const now = Date.now()
+      dongfuStore.syncIdleState({
+        ...dongfuStore.idle,
+        lastTickAt: now,
+      })
       this.tickTimer = setInterval(() => this.tickIdle(), IDLE_TICK_MS)
     },
 
@@ -116,7 +156,7 @@ export const useGameStore = defineStore('game', {
     },
 
     /** 结束修炼（不含结算，供结算流程内主动结束） */
-    finishIdle(message: string) {
+    finishIdle(message?: string) {
       const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
 
@@ -125,7 +165,9 @@ export const useGameStore = defineStore('game', {
         ...dongfuStore.idle,
         isRunning: false,
       })
-      this.lastMessage = message
+      if (message !== undefined) {
+        this.lastMessage = message
+      }
     },
 
     /** 开始修炼 */
@@ -194,6 +236,7 @@ export const useGameStore = defineStore('game', {
         elapsed,
         dongfuStore.idle.xiuweiRemainder,
         now,
+        playerStore.reincarnation.cultivation,
       )
 
       dongfuStore.syncDongfu(result.dongfu)
@@ -211,13 +254,60 @@ export const useGameStore = defineStore('game', {
       }
 
       if (isRealmXiuweiFull(playerStore.player)) {
-        this.finishIdle('当前境界修为已满，修炼已自动停止，请前往突破。')
+        const wasCultivating = dongfuStore.idle.isRunning
+        if (wasCultivating) {
+          this.finishIdle()
+        }
+        const autoResult = this.tryAutoMinorBreakthrough()
+        if (!autoResult.attempted && wasCultivating) {
+          this.lastMessage = '当前境界修为已满，修炼已自动停止，请前往突破。'
+        } else if (autoResult.attempted && wasCultivating) {
+          this.lastMessage = `${autoResult.message} 修炼已自动停止。`
+        }
       }
     },
 
     /** 修炼 tick */
     tickIdle() {
       this.applyCultivationElapsed()
+    },
+
+    /** 结算突破掷骰结果并写入玩家状态 */
+    applyBreakthroughAttemptResult(result: BreakthroughAttemptResult) {
+      const playerStore = usePlayerStore()
+      this.lastMessage = result.message
+      if (result.success && result.newRealm) {
+        const unlocks = playerStore.breakthrough(result.newRealm)
+        for (const unlock of unlocks) {
+          const titleHint = unlock.rewardTitleId ? '，获得新称号' : ''
+          this.pushSystemLog(`成就解锁：「${unlock.name}」${titleHint}`)
+        }
+      } else if (result.rolled && result.xiuweiLoss) {
+        playerStore.recordBreakthroughFailure(result.xiuweiLoss)
+      }
+    },
+
+    /**
+     * 小境界修为满时自动突破（大境界仍需手动前往修炼页突破）
+     */
+    tryAutoMinorBreakthrough(): { attempted: boolean; success: boolean; message: string } {
+      if (this.isRecoveryLocked) {
+        return { attempted: false, success: false, message: '' }
+      }
+
+      const playerStore = usePlayerStore()
+      if (!canAutoMinorBreakthrough(playerStore.player, playerStore.activeGongfa)) {
+        return { attempted: false, success: false, message: '' }
+      }
+
+      const result = tryBreakthrough(playerStore.player, playerStore.activeGongfa)
+      this.applyBreakthroughAttemptResult(result)
+      this.pushSystemLog(`小境界自动突破：${result.message}`)
+      return {
+        attempted: true,
+        success: result.success,
+        message: result.message,
+      }
     },
 
     /** 尝试突破 */
@@ -230,11 +320,8 @@ export const useGameStore = defineStore('game', {
       }
 
       const playerStore = usePlayerStore()
-      const result = tryBreakthrough(playerStore.player)
-      this.lastMessage = result.message
-      if (result.success && result.newRealm) {
-        playerStore.breakthrough(result.newRealm)
-      }
+      const result = tryBreakthrough(playerStore.player, playerStore.activeGongfa)
+      this.applyBreakthroughAttemptResult(result)
       return result
     },
 
@@ -275,6 +362,18 @@ export const useGameStore = defineStore('game', {
         `开始第 ${restCount} 次调息，需 ${durationMs / 1000} 秒恢复气血。`,
       )
 
+      if (shouldApplyRestLifespanPenalty(restCount)) {
+        const playerStore = usePlayerStore()
+        const penalty = playerStore.reduceLifespan(REST_LIFESPAN_PENALTY_YEARS)
+        this.pushSystemLog(
+          `连续调息 ${restCount} 次，寿元削减 ${REST_LIFESPAN_PENALTY_YEARS} 年。`,
+        )
+        if (penalty.lifespanEnded) {
+          this.clearRecoveryTimers()
+          return
+        }
+      }
+
       this.recoveryTimer = setTimeout(() => {
         this.finishResting()
       }, durationMs)
@@ -290,9 +389,10 @@ export const useGameStore = defineStore('game', {
       }
 
       const playerStore = usePlayerStore()
-      playerStore.setHp(playerStore.player.combat.maxHp)
-      playerStore.setMp(playerStore.player.combat.maxMp)
+      playerStore.restoreFullResources()
       this.battleSkillState = null
+      this.battleMonsterSkillState = null
+      this.battlePlayerDebuffs = null
       this.recoveryPhase = 'none'
       this.recoveryTotalMs = 0
       this.recoveryRemainingMs = 0
@@ -310,6 +410,13 @@ export const useGameStore = defineStore('game', {
     /** 连续战败五次后陷入重伤昏迷 */
     enterSevereInjury() {
       this.clearRecoveryTimers()
+
+      const playerStore = usePlayerStore()
+      const penalty = playerStore.reduceLifespan(SEVERE_INJURY_LIFESPAN_PENALTY_YEARS)
+      this.pushSystemLog(`陷入重伤，寿元削减 ${SEVERE_INJURY_LIFESPAN_PENALTY_YEARS} 年。`)
+      if (penalty.lifespanEnded) {
+        return
+      }
 
       const durationMs = calcSevereInjuryDurationMs()
       this.recoveryPhase = 'severe_injury'
@@ -329,9 +436,10 @@ export const useGameStore = defineStore('game', {
       this.clearRecoveryTimers()
 
       const playerStore = usePlayerStore()
-      playerStore.setHp(playerStore.player.combat.maxHp)
-      playerStore.setMp(playerStore.player.combat.maxMp)
+      playerStore.restoreFullResources()
       this.battleSkillState = null
+      this.battleMonsterSkillState = null
+      this.battlePlayerDebuffs = null
       this.consecutiveDefeatCount = 0
       this.recoveryPhase = 'none'
       this.recoveryTotalMs = 0
@@ -418,11 +526,16 @@ export const useGameStore = defineStore('game', {
       this.currentMonster = encounter.monster
       playerStore.monsterTierPity = encounter.pityState
       playerStore.save()
-      playerStore.setHp(playerStore.player.combat.maxHp)
-      playerStore.setMp(playerStore.player.combat.maxMp)
-      this.battleSkillState = resetBattleSkillState(playerStore.player)
+      playerStore.restoreFullResources()
+      this.battleSkillState = resetBattleSkillState(playerStore.effectiveCombatStats.combat.maxMp)
+      this.battleMonsterSkillState = resetBattleMonsterSkillState(this.currentMonster.combat.maxMp)
+      this.battlePlayerDebuffs = createPlayerBattleDebuffs()
       this.isBattling = true
       this.pushSystemLog(`在 ${map.name} 遭遇 ${this.currentMonster.name}！`)
+      const statusHint = getMonsterStatusEncounterHint(this.currentMonster.status)
+      if (statusHint) {
+        this.pushSystemLog(statusHint)
+      }
       this.startAutoBattleLoop(map.roundIntervalMs)
     },
 
@@ -450,13 +563,25 @@ export const useGameStore = defineStore('game', {
 
       const playerStore = usePlayerStore()
       const gongfa = playerStore.activeGongfa
-      if (!this.currentMonster || !gongfa || !this.isBattling || !this.battleSkillState) return
+      if (
+        !this.currentMonster
+        || !gongfa
+        || !this.isBattling
+        || !this.battleSkillState
+        || !this.battleMonsterSkillState
+        || !this.battlePlayerDebuffs
+      ) return
 
       const result = runBattleRound(
         playerStore.player,
         this.currentMonster,
         gongfa,
         this.battleSkillState,
+        playerStore.gongfaList,
+        {
+          monsterSkillState: this.battleMonsterSkillState,
+          playerDebuffs: this.battlePlayerDebuffs,
+        },
       )
 
       this.battleLogs.push(...result.logs)
@@ -482,6 +607,12 @@ export const useGameStore = defineStore('game', {
           this.consecutiveDefeatCount = 0
           const messages: string[] = []
 
+          const achievementUnlocks = playerStore.recordBattleWin()
+          for (const unlock of achievementUnlocks) {
+            const titleHint = unlock.rewardTitleId ? '，获得新称号' : ''
+            this.pushSystemLog(`成就解锁：「${unlock.name}」${titleHint}`)
+          }
+
           if (result.gongfaExpGain > 0) {
             const levelResult = playerStore.gainGongfaExp(gongfa.id, result.gongfaExpGain)
             if (levelResult) {
@@ -491,9 +622,28 @@ export const useGameStore = defineStore('game', {
             }
           }
 
+          if (result.xiuweiGain > 0) {
+            playerStore.addXiuwei(result.xiuweiGain)
+            this.tryAutoMinorBreakthrough()
+          }
+
+          if (this.currentMonster) {
+            const lingshiGain = calcBattleLingshiReward(
+              this.currentMonster.realm,
+              playerStore.player.realm,
+              this.currentMonster.tier,
+            )
+            if (lingshiGain > 0) {
+              playerStore.gainLingshi(lingshiGain)
+              const text = `获得灵石 ${lingshiGain} 枚`
+              messages.push(text)
+              this.pushSystemLog(text)
+            }
+          }
+
           const map = this.currentMap
           if (map) {
-            const lootMultiplier = getTierLootMultiplier(this.currentMonster.tier)
+            const lootMultiplier = getTierLootMultiplier(this.currentMonster!.tier)
             const loot = rollMapLoot(map.drops, lootMultiplier)
             for (const gongfaId of loot.gongfaIds) {
               const obtain = playerStore.tryObtainGongfa(gongfaId)
@@ -505,6 +655,26 @@ export const useGameStore = defineStore('game', {
                 const text = `已领悟「${obtain.gongfaName}」，并无新收获。`
                 this.pushSystemLog(text)
               }
+            }
+            for (const drop of loot.items) {
+              const gain = playerStore.gainItem(drop.itemId, drop.count)
+              if (gain.added > 0) {
+                const name = getItemDefinition(drop.itemId)?.name ?? '未知物品'
+                const text = `获得「${name}」×${gain.added}`
+                messages.push(text)
+                this.pushSystemLog(text)
+              }
+            }
+          }
+
+          const dongfuLevel = useDongfuStore().dongfu.level
+          const treasureDrop = rollDongfuTreasureDrop(this.currentMonster!, dongfuLevel)
+          if (treasureDrop) {
+            const gain = playerStore.gainItem(treasureDrop.itemId, 1)
+            if (gain.added > 0) {
+              const text = `获得洞府宝物「${treasureDrop.itemName}」！`
+              messages.push(text)
+              this.pushSystemLog(text)
             }
           }
 
@@ -558,6 +728,8 @@ export const useGameStore = defineStore('game', {
       this.lastMessage = ''
       this.cultivationResumed = false
       this.battleSkillState = null
+      this.battleMonsterSkillState = null
+      this.battlePlayerDebuffs = null
     },
   },
 })

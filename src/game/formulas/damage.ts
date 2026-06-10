@@ -12,6 +12,8 @@ export interface DamageInput {
   /** 五行克制倍率（默认 1） */
   elementMultiplier?: number
   randomFactor?: number
+  /** 受击减伤（小数） */
+  damageReduction?: number
 }
 
 export function calcFinalDamage(input: DamageInput): number {
@@ -24,12 +26,15 @@ export function calcFinalDamage(input: DamageInput): number {
     penetration = 0,
     elementMultiplier = 1,
     randomFactor = 0.9 + Math.random() * 0.2,
+    damageReduction = 0,
   } = input
 
   const critMultiplier = isCrit ? critDamage : 1
   const effectiveDefense = targetDefense * (1 - penetration / 100)
   const raw = attack * skillMultiplier * critMultiplier * elementMultiplier * randomFactor
-  return Math.max(1, Math.floor(raw - effectiveDefense))
+  const afterDefense = Math.max(1, Math.floor(raw - effectiveDefense))
+  const reduction = Math.min(0.9, Math.max(0, damageReduction))
+  return Math.max(1, Math.floor(afterDefense * (1 - reduction)))
 }
 
 /**

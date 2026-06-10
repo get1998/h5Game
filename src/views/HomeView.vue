@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import GameLayout from '@/components/layout/GameLayout.vue'
 import { useDongfuStore } from '@/stores/dongfu'
 import { useGameStore } from '@/stores/game'
@@ -20,6 +20,7 @@ const cultivationDetail = computed(() =>
     playerStore.player,
     dongfuStore.dongfu,
     playerStore.activeGongfa,
+    playerStore.reincarnation.cultivation,
   ),
 )
 
@@ -46,6 +47,7 @@ const lingqiCostPerXiuweiText = computed(() => {
     playerStore.player,
     dongfuStore.dongfu,
     playerStore.activeGongfa,
+    playerStore.reincarnation.cultivation,
   )
   return cost > 0 ? `${cost} 灵气` : '—'
 })
@@ -71,6 +73,52 @@ const isIdleButtonDisabled = computed(() =>
   gameStore.isRecoveryLocked
   || (!gameStore.idle.isRunning && isXiuweiFull.value),
 )
+
+const dongfuUpgradeCheck = computed(() => dongfuStore.checkUpgrade())
+
+const upgradeInfo = computed(() => {
+  const info = dongfuInfo.value
+  if (!info.nextLevel) {
+    return {
+      hasNext: false,
+      summary: '已达最高等级',
+      actionText: '已满级',
+      actionDisabled: true,
+    }
+  }
+
+  const check = dongfuUpgradeCheck.value
+  const parts: string[] = [
+    `下一级：Lv.${info.nextLevel}「${info.nextName}」`,
+    `灵气上限 ${info.nextMaxLingqi}`,
+  ]
+  if (info.upgradeCostLingshi) {
+    parts.push(`花费 ${info.upgradeCostLingshi} 灵石`)
+  }
+  if (info.upgradeTreasureName) {
+    parts.push(`需「${info.upgradeTreasureName}」×1（持有 ${info.upgradeTreasureCount}）`)
+  }
+
+  const treasureHint = info.upgradeTreasureMinDropRealm && info.upgradeTreasureName
+    ? `宝物历练掉落：击杀 ${info.upgradeTreasureMinDropRealm} 及以上境界怪物，品阶越高掉率越高；坊市偶现稀世寄售。`
+    : ''
+
+  return {
+    hasNext: true,
+    summary: parts.join(' · '),
+    actionText: check.canUpgrade ? '升级洞府' : (check.reason ?? '不可升级'),
+    actionDisabled: !check.canUpgrade || gameStore.isRecoveryLocked || gameStore.idle.isRunning,
+    treasureHint,
+  }
+})
+
+const upgradeMessage = ref('')
+
+function handleUpgradeDongfu() {
+  if (upgradeInfo.value.actionDisabled) return
+  const result = dongfuStore.upgradeDongfuLevel()
+  upgradeMessage.value = result.message
+}
 </script>
 
 <template>
@@ -127,6 +175,20 @@ const isIdleButtonDisabled = computed(() =>
         <span class="stat-label">修炼速率</span>
         <span class="stat-value">{{ cultivationRateText }}</span>
       </div>
+      <div v-if="upgradeInfo.hasNext" class="dongfu-upgrade">
+        <p class="dongfu-upgrade__summary">{{ upgradeInfo.summary }}</p>
+        <button
+          type="button"
+          class="dongfu-upgrade__btn game-btn game-btn--primary"
+          :disabled="upgradeInfo.actionDisabled"
+          @click="handleUpgradeDongfu"
+        >
+          {{ upgradeInfo.actionText }}
+        </button>
+        <p v-if="upgradeInfo.treasureHint" class="dongfu-upgrade__hint">{{ upgradeInfo.treasureHint }}</p>
+        <p v-if="upgradeMessage" class="dongfu-upgrade__message">{{ upgradeMessage }}</p>
+      </div>
+      <p v-else class="dongfu-upgrade__max">洞府已达无上仙府，灵气充沛。</p>
     </section>
 
     <section class="home-card game-card">
@@ -206,5 +268,46 @@ const isIdleButtonDisabled = computed(() =>
   width: 100%;
   margin-top: 14px;
   cursor: pointer;
+}
+
+.dongfu-upgrade {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid $color-border;
+}
+
+.dongfu-upgrade__summary {
+  font-size: 12px;
+  line-height: 1.6;
+  color: $color-text-muted;
+}
+
+.dongfu-upgrade__btn {
+  width: 100%;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.dongfu-upgrade__btn:disabled {
+  cursor: not-allowed;
+}
+
+.dongfu-upgrade__hint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: $color-text-muted;
+}
+
+.dongfu-upgrade__message {
+  margin-top: 8px;
+  font-size: 13px;
+  color: $color-primary;
+}
+
+.dongfu-upgrade__max {
+  margin-top: 12px;
+  font-size: 12px;
+  color: $color-text-muted;
 }
 </style>

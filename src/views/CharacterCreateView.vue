@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { hasReincarnationBonus } from '@/game/models/reincarnation'
 import {
   buildSpiritRootDisplay,
   generateRandomName,
@@ -12,9 +13,18 @@ import {
   type CharacterOriginResult,
 } from '@/game/systems/character-origin'
 import { usePlayerStore } from '@/stores/player'
+import { useGameStore } from '@/stores/game'
 
+const route = useRoute()
 const router = useRouter()
 const playerStore = usePlayerStore()
+const gameStore = useGameStore()
+
+const isReincarnateMode = computed(
+  () => route.query.reincarnate === '1' && playerStore.isAwaitingReincarnation,
+)
+const reincarnationGeneration = computed(() => playerStore.nextReincarnationGeneration)
+const hasInheritedBonus = computed(() => hasReincarnationBonus(playerStore.reincarnation))
 
 type CreateStep = 'spirit-root' | 'origin'
 
@@ -110,14 +120,21 @@ function handleSelectGongfa(templateId: string) {
 function handleConfirm() {
   if (!originResult.value || !selectedGongfaTemplateId.value) return
   const name = playerName.value.trim() || '无名修士'
-  playerStore.createCharacter({
+  const payload = {
     name,
     spiritRootType: spiritRootResult.value.spiritRootType,
     spiritRootElements: [...spiritRootResult.value.spiritRootElements],
     originTitle: originResult.value.originTitle,
     originSummary: originResult.value.originSummary,
     starterGongfaTemplateId: selectedGongfaTemplateId.value,
-  })
+  }
+
+  if (isReincarnateMode.value) {
+    gameStore.resetGame()
+    playerStore.reincarnateCharacter(payload)
+  } else {
+    playerStore.createCharacter(payload)
+  }
   router.push('/home')
 }
 </script>
@@ -127,6 +144,14 @@ function handleConfirm() {
     <div class="create-page__bg" />
 
     <div class="create-page__content">
+      <section v-if="isReincarnateMode" class="create-reincarnation">
+        <p class="create-reincarnation__title">再入轮回 · 第 {{ reincarnationGeneration }} 世</p>
+        <p class="create-reincarnation__desc">
+          继承前世各世 10% 基础属性，轮回加成已累加
+          <template v-if="hasInheritedBonus">，新一世将携因果再踏仙途</template>
+        </p>
+      </section>
+
       <!-- 第一步：灵根测定 -->
       <template v-if="step === 'spirit-root'">
         <header class="create-header">
@@ -575,6 +600,28 @@ function handleConfirm() {
   margin-top: 6px;
   font-size: 12px;
   color: $color-success;
+}
+
+.create-reincarnation {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba($color-primary, 0.35);
+  border-radius: 8px;
+  background: rgba($color-primary, 0.06);
+  text-align: left;
+}
+
+.create-reincarnation__title {
+  font-size: 15px;
+  color: $color-primary;
+  font-weight: 600;
+}
+
+.create-reincarnation__desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: $color-text-muted;
+  line-height: 1.6;
 }
 
 .create-actions {

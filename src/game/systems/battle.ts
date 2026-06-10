@@ -1,11 +1,22 @@
 import { calcGongfaExpGain } from '@/game/formulas/gongfa-exp'
+import { calcBattleXiuweiGain } from '@/game/formulas/battle-xiuwei'
 import { calcSkillProficiencyGain } from '@/game/formulas/skill-proficiency'
 import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
 import { getSkillById } from '@/game/models/skill'
-import { getMonsterAttackElement, type Monster } from '@/game/models/monster'
+import type { Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
-import { appendElementHint, resolveAttack } from '@/game/systems/combat-resolve'
 import { createBattleContext } from '@/game/systems/combat-context'
+import {
+  applyPoisonRoundStart,
+  createPlayerBattleDebuffs,
+  tickDebuffDurations,
+  type PlayerBattleDebuffs,
+} from '@/game/systems/battle-debuffs'
+import {
+  executeMonsterAttack,
+  resetBattleMonsterSkillState,
+  type BattleMonsterSkillState,
+} from '@/game/systems/monster-skill-combat'
 import {
   executePlayerAttack,
   type BattleSkillState,
@@ -21,8 +32,24 @@ export const MAX_CONSECUTIVE_REST_COUNT = 5
 /** 重伤昏迷时长（秒） */
 export const SEVERE_INJURY_SECONDS = 180
 
+/** 连续进入调息达此次数时，寿元减少 1 年（3、6、9…） */
+export const REST_LIFESPAN_PENALTY_THRESHOLD = 3
+
+/** 连续调息触发的寿元削减（年） */
+export const REST_LIFESPAN_PENALTY_YEARS = 1
+
+/** 陷入重伤时寿元削减（年） */
+export const SEVERE_INJURY_LIFESPAN_PENALTY_YEARS = 5
+
 /** 调息 / 重伤阶段 */
 export type RecoveryPhase = 'none' | 'resting' | 'severe_injury'
+
+/**
+ * 本次进入调息是否应扣减寿元（连续第 3、6、9… 次调息）
+ */
+export function shouldApplyRestLifespanPenalty(restCount: number): boolean {
+  return restCount > 0 && restCount % REST_LIFESPAN_PENALTY_THRESHOLD === 0
+}
 
 /**
  * 计算第 n 次连续战败后的调息时长（毫秒）
@@ -82,19 +109,53 @@ export interface BattleRoundResult {
   isFinished: boolean
   playerWin: boolean
   gongfaExpGain: number
+  /** 击杀获得的修为（精英及以上同级为主；高境界差时普通亦可获得） */
+  xiuweiGain: number
   /** 本回合技能熟练度增量（施展技能且怪物境界不低于玩家时才有） */
   skillProficiencyGains: BattleSkillProficiencyGain[]
 }
 
 export type { BattleSkillState } from '@/game/systems/skill-combat'
+export type { BattleMonsterSkillState } from '@/game/systems/monster-skill-combat'
+export type { PlayerBattleDebuffs } from '@/game/systems/battle-debuffs'
 export type { BattleContext } from '@/game/systems/combat-context'
 export type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
-export { buildCombatSnapshot } from '@/game/formulas/combat-snapshot'
+export {
+  buildCombatSnapshot,
+  buildEffectiveCombatStats,
+  DEFAULT_STAT_CONTRIBUTORS,
+  aggregateContributions,
+  gongfaStatContributor,
+  passiveStatContributor,
+  getGongfaCombatContribution,
+  aggregatePermanentPassiveContributions,
+  getUnlockedPassiveSkills,
+  isPermanentPassiveSkill,
+} from '@/game/systems/stat-contributors'
+export type {
+  BattleLoadout,
+  EffectiveCombatStats,
+  StatContributor,
+  StatContributorContext,
+  CombatStatBreakdown,
+  CombatStatContribution,
+} from '@/game/systems/stat-contributors'
 export { createBattleContext } from '@/game/systems/combat-context'
 export {
   createBattleSkillState,
   resetBattleSkillState,
 } from '@/game/systems/skill-combat'
+export {
+  createBattleMonsterSkillState,
+  resetBattleMonsterSkillState,
+} from '@/game/systems/monster-skill-combat'
+export { createPlayerBattleDebuffs } from '@/game/systems/battle-debuffs'
+
+/** 单场战斗扩展状态（怪物技能 + 玩家减益） */
+export interface BattleRoundExtras {
+  monsterSkillState: BattleMonsterSkillState
+  playerDebuffs: PlayerBattleDebuffs
+}
 
 let logIdCounter = 0
 
@@ -116,11 +177,38 @@ export function runBattleRound(
   monster: Monster,
   gongfa: Gongfa,
   skillState: BattleSkillState,
+  gongfaList: Gongfa[] = [],
+  battleExtras?: BattleRoundExtras,
 ): BattleRoundResult {
-  const ctx = createBattleContext(player, monster, gongfa, skillState)
+  const ctx = createBattleContext(player, monster, gongfa, skillState, gongfaList)
   const logs: BattleLogEntry[] = []
   let playerHp = player.combat.hp
   let monsterHp = monster.combat.hp
+
+  const monsterSkillState = battleExtras?.monsterSkillState
+    ?? resetBattleMonsterSkillState(monster.combat.maxMp)
+  const playerDebuffs = battleExtras?.playerDebuffs ?? createPlayerBattleDebuffs()
+
+  const poisonDamage = applyPoisonRoundStart(playerDebuffs, player.combat.maxHp)
+  if (poisonDamage > 0) {
+    playerHp = Math.max(0, playerHp - poisonDamage)
+    logs.push(createLog(`中毒发作，你损失 ${poisonDamage} 点气血。`, 'damage'))
+    if (playerHp <= 0) {
+      logs.push(createLog('你中毒身亡，将自动调息恢复。', 'system'))
+      tickDebuffDurations(playerDebuffs)
+      return {
+        logs,
+        playerHp: 0,
+        playerMp: skillState.playerMp,
+        monsterHp,
+        isFinished: true,
+        playerWin: false,
+        gongfaExpGain: 0,
+        xiuweiGain: 0,
+        skillProficiencyGains: [],
+      }
+    }
+  }
 
   const playerAttack = executePlayerAttack(
     ctx.snapshot,
@@ -161,10 +249,18 @@ export function runBattleRound(
       spiritRootType: player.spiritRootType,
       spiritRootElements: player.spiritRootElements,
       gongfaElement: getGongfaPrimaryElement(gongfa),
+    }, player.cultivation.gongfaExpMultiplier)
+    const xiuweiResult = calcBattleXiuweiGain({
+      player,
+      monsterRealm: monster.realm,
+      monsterTier: monster.tier,
     })
     logs.push(createLog(`击败 ${monster.name}！`, 'system'))
     if (gongfaExpGain > 0) {
       logs.push(createLog(`获得功法经验 ${gongfaExpGain} 点。`, 'system'))
+    }
+    if (xiuweiResult.gain > 0) {
+      logs.push(createLog(`获得修为 ${xiuweiResult.gain} 点。`, 'system'))
     }
     return {
       logs,
@@ -174,45 +270,22 @@ export function runBattleRound(
       isFinished: true,
       playerWin: true,
       gongfaExpGain,
+      xiuweiGain: xiuweiResult.gain,
       skillProficiencyGains,
     }
   }
 
-  const monsterAttackElement = getMonsterAttackElement(monster)
-  const result = resolveAttack({
-    source: 'monster',
-    attacker: {
-      attack: monster.combat.attack,
-      critRate: monster.combat.critRate,
-      critDamage: monster.combat.critDamage,
-      penetration: monster.combat.penetration,
-      hitRate: monster.combat.hitRate,
-      speed: monster.combat.speed,
-    },
-    defender: {
-      defense: ctx.snapshot.defense,
-      speed: ctx.snapshot.speed,
-      element: ctx.snapshot.defenseElement,
-    },
-    attackElement: monsterAttackElement,
-  })
+  const monsterAttack = executeMonsterAttack(
+    monster,
+    ctx.snapshot,
+    monsterSkillState,
+    playerDebuffs,
+    createLog,
+  )
+  logs.push(...monsterAttack.logs)
+  playerHp = Math.max(0, playerHp - monsterAttack.playerHpDelta)
 
-  if (result.hit) {
-    playerHp = Math.max(0, playerHp - result.damage)
-    logs.push(
-      createLog(
-        appendElementHint(
-          result.isCrit
-            ? `${monster.name} 对你造成暴击 ${result.damage} 点伤害！`
-            : `${monster.name} 对你造成 ${result.damage} 点伤害。`,
-          result.elementHint,
-        ),
-        result.isCrit ? 'crit' : 'damage',
-      ),
-    )
-  } else {
-    logs.push(createLog(`你闪避了 ${monster.name} 的攻击。`, 'miss'))
-  }
+  tickDebuffDurations(playerDebuffs)
 
   const isFinished = playerHp <= 0
   if (isFinished) {
@@ -227,6 +300,7 @@ export function runBattleRound(
     isFinished,
     playerWin: false,
     gongfaExpGain: 0,
+    xiuweiGain: 0,
     skillProficiencyGains,
   }
 }

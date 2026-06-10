@@ -47,16 +47,31 @@ const router = createRouter({
       component: () => import('@/views/CharacterView.vue'),
       meta: { title: '角色' },
     },
+    {
+      path: '/achievement',
+      name: 'achievement',
+      component: () => import('@/views/AchievementView.vue'),
+      meta: { title: '成就' },
+    },
+    {
+      path: '/market',
+      name: 'market',
+      component: () => import('@/views/MarketView.vue'),
+      meta: { title: '坊市' },
+    },
   ],
 })
 
-const GAME_ROUTES = ['/home', '/cultivation', '/gongfa', '/battle', '/character']
+const GAME_ROUTES = ['/home', '/cultivation', '/gongfa', '/battle', '/character', '/achievement', '/market']
 
 router.beforeEach((to) => {
   if (!GAME_ROUTES.includes(to.path)) return true
   const playerStore = usePlayerStore()
   if (!playerStore.hasSave) {
     return { path: '/create' }
+  }
+  if (playerStore.isAwaitingReincarnation) {
+    return { path: '/' }
   }
   if (to.path !== '/home' && useDongfuStore().isCultivating) {
     return { path: '/home' }

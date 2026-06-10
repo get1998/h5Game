@@ -396,6 +396,16 @@ export function getRealmIndex(realm: RealmStage): number {
 }
 
 /**
+ * 获取偏移若干小境界后的境界（越界时钳制到边界）
+ */
+export function getRealmAtOffset(realm: RealmStage, offset: number): RealmStage {
+  const index = getRealmIndex(realm) + offset
+  if (index <= 0) return REALM_ORDER[0]
+  if (index >= REALM_ORDER.length) return REALM_ORDER[REALM_ORDER.length - 1]
+  return REALM_ORDER[index]
+}
+
+/**
  * 与境界等比的推荐功法等级（凡品校准基准：炼气一层≈1级，化神大圆满≈满级）
  * @param realm 当前境界
  * @param maxLevel 功法最高等级，默认 10

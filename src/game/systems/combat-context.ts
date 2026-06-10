@@ -1,4 +1,5 @@
-import { buildCombatSnapshot, type CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import { buildEffectiveCombatStats } from '@/game/systems/stat-contributors'
+import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
 import type { Gongfa } from '@/game/models/gongfa'
 import type { Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
@@ -23,12 +24,18 @@ export function createBattleContext(
   monster: Monster,
   gongfa: Gongfa,
   skillState: BattleSkillState,
+  gongfaList: Gongfa[] = [],
 ): BattleContext {
+  const { snapshot } = buildEffectiveCombatStats(player, {
+    activeGongfa: gongfa,
+    gongfaList,
+  })
+
   return {
     player,
     monster,
     gongfa,
-    snapshot: buildCombatSnapshot(player, gongfa),
+    snapshot,
     skillState,
   }
 }

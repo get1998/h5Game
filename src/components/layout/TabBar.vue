@@ -17,6 +17,8 @@ const tabs: TabItem[] = [
   { path: '/cultivation', label: '修炼', icon: '🧘' },
   { path: '/gongfa', label: '功法', icon: '📜' },
   { path: '/battle', label: '历练', icon: '⚔️' },
+  { path: '/market', label: '坊市', icon: '🏪' },
+  { path: '/achievement', label: '成就', icon: '🏆' },
   { path: '/character', label: '角色', icon: '👤' },
 ]
 

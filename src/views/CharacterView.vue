@@ -15,6 +15,7 @@ const characterStats = computed(() => {
     { label: '道号', value: p.name },
     { label: '境界', value: p.realm },
     { label: '出身', value: p.originTitle || '未知' },
+    { label: '称号', value: playerStore.equippedTitleText || '未佩戴' },
     { label: '年龄', value: `${p.age} 岁` },
     { label: '寿元', value: `${p.lifespan} 年` },
     { label: '修为', value: String(p.xiuwei) },
@@ -24,18 +25,48 @@ const characterStats = computed(() => {
   ]
 })
 
+const effectiveCombat = computed(() => playerStore.effectiveCombatStats.combat)
+const realmCombat = computed(() => playerStore.effectiveCombatStats.breakdown.realm)
+
+function formatBonus(current: number, base: number): string {
+  const bonus = current - base
+  if (bonus === 0) return String(current)
+  return `${current}（+${bonus}）`
+}
+
 const combatStats = computed(() => {
-  const c = playerStore.player.combat
+  const effective = effectiveCombat.value
+  const base = realmCombat.value
   return [
-    { label: '气血', value: `${c.hp} / ${c.maxHp}` },
-    { label: '灵力', value: `${c.mp} / ${c.maxMp}` },
-    { label: '攻击', value: String(c.attack) },
-    { label: '防御', value: String(c.defense) },
-    { label: '速度', value: String(c.speed) },
-    { label: '暴击率', value: `${Math.floor(c.critRate * 100)}%` },
-    { label: '暴击伤害', value: `${Math.floor(c.critDamage * 100)}%` },
-    { label: '命中率', value: `${Math.floor(c.hitRate * 100)}%` },
-    { label: '闪避率', value: `${Math.floor(c.dodgeRate * 100)}%` },
+    {
+      label: '气血',
+      value: `${effective.hp} / ${effective.maxHp}`,
+      hint: effective.maxHp > base.maxHp ? `境界 ${base.maxHp}` : '',
+    },
+    {
+      label: '灵力',
+      value: `${effective.mp} / ${effective.maxMp}`,
+      hint: effective.maxMp > base.maxMp ? `境界 ${base.maxMp}` : '',
+    },
+    { label: '攻击', value: formatBonus(effective.attack, base.attack) },
+    { label: '防御', value: formatBonus(effective.defense, base.defense) },
+    { label: '速度', value: formatBonus(effective.speed, base.speed) },
+    {
+      label: '暴击率',
+      value: `${Math.floor(effective.critRate * 100)}%`,
+      hint: effective.critRate > base.critRate ? '含功法/被动' : '',
+    },
+    {
+      label: '暴击伤害',
+      value: `${Math.floor(effective.critDamage * 100)}%`,
+    },
+    { label: '命中率', value: `${Math.floor(effective.hitRate * 100)}%` },
+    { label: '闪避率', value: `${Math.floor(effective.dodgeRate * 100)}%` },
+    {
+      label: '穿透',
+      value: String(effective.penetration),
+      hint: effective.penetration > base.penetration ? '含功法/被动' : '',
+    },
   ]
 })
 
@@ -76,13 +107,17 @@ function resetSave() {
 
     <section class="character-card game-card">
       <div class="page-section-title">战斗属性</div>
+      <p class="character-combat-hint">含主修功法与已领悟永久被动加成</p>
       <div
         v-for="stat in combatStats"
         :key="stat.label"
         class="stat-row"
       >
         <span class="stat-label">{{ stat.label }}</span>
-        <span class="stat-value">{{ stat.value }}</span>
+        <span class="stat-value">
+          {{ stat.value }}
+          <span v-if="stat.hint" class="stat-hint">{{ stat.hint }}</span>
+        </span>
       </div>
     </section>
 
@@ -110,6 +145,18 @@ function resetSave() {
   margin-top: 16px;
 }
 
+.character-combat-hint {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: $color-text-muted;
+}
+
+.stat-hint {
+  margin-left: 6px;
+  font-size: 11px;
+  color: $color-text-muted;
+}
+
 .character-origin {
   font-size: 14px;
   color: $color-text-muted;
@@ -119,5 +166,10 @@ function resetSave() {
 
 .character-reset-btn {
   width: 100%;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
 }
 </style>

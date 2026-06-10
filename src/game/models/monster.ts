@@ -1,3 +1,4 @@
+import { MANGHUANG_MONSTER_KIND_WEIGHTS } from '@/game/constants/combat-balance'
 import type { MapDropItem, MonsterTemplate } from '@/game/constants/maps'
 import { pickRandomRealmInRangeWeighted } from '@/game/constants/realm'
 import type { ElementType, RealmStage } from '@/game/types'
@@ -11,6 +12,44 @@ export type MonsterKind = '妖兽' | '灵兽' | '人'
 
 /** 怪物品阶 */
 export type MonsterTier = '普通' | '精英' | '首领' | '传奇'
+
+/** 怪物状态（展示前缀，与品阶独立；弱化状态降低气血上限，营造捡漏感） */
+export type MonsterStatus = '普通' | '受伤' | '中毒' | '濒死'
+
+/** 怪物状态前缀 */
+export const MONSTER_STATUS_PREFIX: Record<MonsterStatus, string> = {
+  普通: '',
+  受伤: '受伤·',
+  中毒: '中毒·',
+  濒死: '濒死·',
+}
+
+/** 怪物状态生成权重默认值 */
+export const DEFAULT_MONSTER_STATUS_RATES: Record<MonsterStatus, number> = {
+  普通: 0.82,
+  受伤: 0.15,
+  中毒: 0.05,
+  濒死: 0.03,
+}
+
+/** 各状态对气血上限的随机系数区间（遇怪时掷骰，普通恒为 1） */
+export const MONSTER_STATUS_HP_MULTIPLIER_RANGE: Record<
+  MonsterStatus,
+  { min: number; max: number }
+> = {
+  普通: { min: 1, max: 1 },
+  受伤: { min: 0.45, max: 0.72 },
+  中毒: { min: 0.65, max: 0.92 },
+  濒死: { min: 0.18, max: 0.38 },
+}
+
+/** 遇怪时弱化状态的提示文案 */
+export const MONSTER_STATUS_ENCOUNTER_HINT: Partial<Record<MonsterStatus, string>> = {
+  受伤: '此獠带伤，气血不济，正是捡漏良机！',
+  中毒: '此獠中毒未解，实力大减，可以捡漏！',
+  濒死: '此獠奄奄一息，简直是白送的机缘！',
+}
+
 
 /** 怪物品阶生成权重默认值（地图未配置时使用） */
 export const DEFAULT_MONSTER_TIER_RATES: Record<MonsterTier, number> = {
@@ -62,11 +101,9 @@ export function createDefaultMonsterTierPityState(): MonsterTierPityState {
   }
 }
 
-/** 怪物种类遇怪权重默认值（地图未配置时使用） */
+/** 怪物种类遇怪权重默认值（莽荒大陆：妖兽为主，灵兽稀少） */
 export const DEFAULT_MONSTER_KIND_RATES: Record<MonsterKind, number> = {
-  人: 1,
-  妖兽: 0.25,
-  灵兽: 0.2,
+  ...MANGHUANG_MONSTER_KIND_WEIGHTS,
 }
 
 /** @deprecated 使用 DEFAULT_MONSTER_KIND_RATES 或地图 monsterKindRates */
@@ -105,6 +142,10 @@ export interface Monster {
   element: ElementType
   /** 怪物品阶 */
   tier: MonsterTier
+  /** 怪物状态（弱化时降低气血上限，奖励仍按品阶/境界结算） */
+  status: MonsterStatus
+  /** 状态气血系数（0~1，普通为 1） */
+  statusHpRatio: number
   /**
    * 所修炼功法模板 id（仅人型怪物，从当前地图掉落池按五行匹配）
    */
@@ -210,11 +251,74 @@ export function pickRandomMonsterTemplate(
 }
 
 /**
- * 根据品阶拼接展示名称
+ * 随机生成怪物状态
  */
-export function formatMonsterDisplayName(baseName: string, tier: MonsterTier): string {
-  const prefix = TIER_DISPLAY_PREFIX[tier]
-  return prefix ? `${prefix}${baseName}` : baseName
+export function pickRandomMonsterStatus(
+  statusRates: Record<MonsterStatus, number> = DEFAULT_MONSTER_STATUS_RATES,
+): MonsterStatus {
+  return pickRandomWeighted(statusRates)
+}
+
+/**
+ * 掷取状态对应的气血系数
+ */
+export function rollMonsterStatusHpRatio(status: MonsterStatus): number {
+  const { min, max } = MONSTER_STATUS_HP_MULTIPLIER_RANGE[status]
+  if (min >= max) {
+    return 1
+  }
+  return min + Math.random() * (max - min)
+}
+
+/**
+ * 按状态修正怪物气血（降低 maxHp 与 hp，战斗更易但奖励不变）
+ */
+export function applyMonsterStatusToCombat(
+  combat: CombatStats,
+  status: MonsterStatus,
+  hpRatio?: number,
+): { combat: CombatStats; statusHpRatio: number } {
+  const ratio = hpRatio ?? rollMonsterStatusHpRatio(status)
+  if (status === '普通' || ratio >= 1) {
+    return { combat, statusHpRatio: 1 }
+  }
+
+  const newMaxHp = Math.max(1, Math.floor(combat.maxHp * ratio))
+  return {
+    combat: {
+      ...combat,
+      maxHp: newMaxHp,
+      hp: newMaxHp,
+    },
+    statusHpRatio: Number(ratio.toFixed(3)),
+  }
+}
+
+/**
+ * 是否为弱化状态（可捡漏）
+ */
+export function isWeakenedMonsterStatus(status: MonsterStatus): boolean {
+  return status !== '普通'
+}
+
+/**
+ * 获取遇怪时的状态提示文案
+ */
+export function getMonsterStatusEncounterHint(status: MonsterStatus): string | null {
+  return MONSTER_STATUS_ENCOUNTER_HINT[status] ?? null
+}
+
+/**
+ * 根据状态与品阶拼接展示名称（状态前缀在前，更易被注意到）
+ */
+export function formatMonsterDisplayName(
+  baseName: string,
+  tier: MonsterTier,
+  status: MonsterStatus = '普通',
+): string {
+  const statusPrefix = MONSTER_STATUS_PREFIX[status]
+  const tierPrefix = TIER_DISPLAY_PREFIX[tier] ?? ''
+  return `${statusPrefix}${tierPrefix}${baseName}`
 }
 
 /**
@@ -242,20 +346,25 @@ export function createMonsterFromTemplate(
   minMonsterRealm: RealmStage,
   maxMonsterRealm: RealmStage,
   tier: MonsterTier,
+  status: MonsterStatus = pickRandomMonsterStatus(),
 ): Monster {
   const realm = pickRandomRealmInRangeWeighted(minMonsterRealm, maxMonsterRealm)
   const gongfaId = template.kind === '人'
     ? matchGongfaForHumanMonster(template.element, mapDrops)
     : undefined
+  const baseCombat = buildMonsterCombat(template, realm, tier, gongfaId)
+  const { combat, statusHpRatio } = applyMonsterStatusToCombat(baseCombat, status)
   return {
     id: template.id,
-    name: formatMonsterDisplayName(template.name, tier),
+    name: formatMonsterDisplayName(template.name, tier, status),
     kind: template.kind,
     realm,
     element: template.element,
     tier,
+    status,
+    statusHpRatio,
     gongfaId,
-    combat: buildMonsterCombat(template, realm, tier, gongfaId),
+    combat,
   }
 }
 

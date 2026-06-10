@@ -10,7 +10,7 @@ export interface WorldTime {
   year: number
   month: number
   day: number
-  /** 上次现实时间推进锚点（毫秒时间戳） */
+  /** 上次现实时间推进锚点（毫秒时间戳，页面打开期间推进） */
   lastRealTickAt: number
 }
 
@@ -70,6 +70,45 @@ export function advanceWorldTime(
 export function calcGameDaysFromRealMs(elapsedMs: number, msPerDay: number): number {
   if (elapsedMs <= 0 || msPerDay <= 0) return 0
   return Math.floor(elapsedMs / msPerDay)
+}
+
+/**
+ * 将世界时间锚点同步到指定现实时刻（冻结或恢复计时，不推进游戏日）
+ */
+export function syncWorldTimeAnchor(time: WorldTime, now: number): WorldTime {
+  return {
+    ...time,
+    lastRealTickAt: now,
+  }
+}
+
+/**
+ * 注册 H5 页面卸载监听：关闭标签页或关闭浏览器时触发（切后台不触发）。
+ *
+ * @returns 卸载监听函数
+ */
+export function bindH5PageUnload(onUnload: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  window.addEventListener('pagehide', onUnload)
+
+  return () => {
+    window.removeEventListener('pagehide', onUnload)
+  }
+}
+
+/**
+ * 将世界时间换算为从纪元起的累计游戏日（用于每日刷新等）
+ */
+export function calcTotalGameDays(time: Pick<WorldTime, 'year' | 'month' | 'day'>): number {
+  const baseYear = 1000
+  return (
+    (time.year - baseYear) * MONTHS_PER_YEAR * DAYS_PER_MONTH
+    + (time.month - 1) * DAYS_PER_MONTH
+    + (time.day - 1)
+  )
 }
 
 /**

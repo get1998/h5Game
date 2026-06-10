@@ -1,5 +1,28 @@
-import { getRealmBaseStats, REALM_LIFESPAN } from '@/game/constants/realm'
+import {
+  getRealmBaseStats,
+  getRealmCultivationBase,
+  REALM_LIFESPAN,
+} from '@/game/constants/realm'
+import {
+  calcRealmBreakthroughStatMultiplier,
+  scaleRealmBaseStatsByMultiplier,
+} from '@/game/formulas/realm-breakthrough'
+import type { Gongfa } from '@/game/models/gongfa'
 import type { ElementType, RealmStage, SpiritRootType } from '@/game/types'
+
+/** 玩家修炼属性（由境界同步，闭关结算读取） */
+export interface CultivationStats {
+  /** 每秒吸入灵气 */
+  absorptionRate: number
+  /** 基础灵气转化率（修为/灵气） */
+  conversionRate: number
+  /** 功法转化率 影响功法修炼效率 */
+  gongfaConversionRate: number
+  /** 功法经验获取倍率，影响修炼该功法的速度 */
+  gongfaExpMultiplier: number
+  /** 技能熟练度获取倍率，影响修炼技能的速度 */
+  skillProficiencyMultiplier: number
+}
 
 /** 玩家战斗属性 */
 export interface CombatStats {
@@ -59,6 +82,10 @@ export interface Player {
   lifespan: number
   /** 修为值，用于突破境界 */
   xiuwei: number
+  /** 当前境界连续突破失败次数（成功后清零） */
+  breakthroughFailures: number
+  /** 修炼属性（吸收率、转化率，随境界同步） */
+  cultivation: CultivationStats
   /** 神识强度 */
   shenshi: number
   /** 肉身强度 */
@@ -70,15 +97,41 @@ export interface Player {
 }
 
 /**
- * 按当前境界常量重算玩家基础属性（读档同步 / 数值表调整后刷新）
+ * 按当前境界同步玩家修炼属性（吸收率、转化率）
+ */
+export function resyncPlayerCultivationStats(player: Player): void {
+  const cultivationBase = getRealmCultivationBase(player.realm)
+  player.cultivation = {
+    absorptionRate: cultivationBase.absorptionRate,
+    gongfaConversionRate: 1,
+    gongfaExpMultiplier: 1,
+    skillProficiencyMultiplier: 1,
+    conversionRate: cultivationBase.conversionRate,
+  }
+}
+
+/**
+ * 按当前境界重算玩家基础属性
  * @param options.preserveResourceRatio 为 true 时按原气血、灵力比例保留当前值
+ * @param options.gongfa 突破时传入主修功法，按品阶×突破灵根×突破五行缩放战斗属性（与闭关倍率独立）
+ * @param options.resetCombat 为 true 时重算战斗/神识/肉身（突破或境界表强制刷新）
  */
 export function resyncPlayerRealmStats(
   player: Player,
-  options: { preserveResourceRatio?: boolean } = {},
+  options: {
+    preserveResourceRatio?: boolean
+    gongfa?: Gongfa
+    resetCombat?: boolean
+  } = {},
 ): void {
-  const { preserveResourceRatio = false } = options
-  const base = getRealmBaseStats(player.realm)
+  const { preserveResourceRatio = false, gongfa, resetCombat = false } = options
+
+  resyncPlayerCultivationStats(player)
+  if (!resetCombat) return
+
+  const realmBase = getRealmBaseStats(player.realm)
+  const multiplier = calcRealmBreakthroughStatMultiplier(player, gongfa)
+  const base = scaleRealmBaseStatsByMultiplier(realmBase, multiplier)
 
   const hpRatio = preserveResourceRatio && player.combat.maxHp > 0
     ? player.combat.hp / player.combat.maxHp
@@ -108,10 +161,15 @@ export function resyncPlayerRealmStats(
 
 /**
  * 将境界基础属性应用到玩家（突破时调用，气血/灵力回满）
+ * @param gongfa 主修功法，用于计算突破属性增幅
  */
-export function applyRealmBaseToPlayer(player: Player, realm: RealmStage): void {
+export function applyRealmBaseToPlayer(
+  player: Player,
+  realm: RealmStage,
+  gongfa?: Gongfa,
+): void {
   player.realm = realm
-  resyncPlayerRealmStats(player)
+  resyncPlayerRealmStats(player, { gongfa, resetCombat: true })
 }
 
 /** 创建新角色默认数据 */
@@ -126,6 +184,14 @@ export function createDefaultPlayer(name = '无名修士'): Player {
     age: 16,
     lifespan: 100,
     xiuwei: 0,
+    breakthroughFailures: 0,
+    cultivation: {
+      absorptionRate: 4,
+      conversionRate: 0.46,
+      gongfaConversionRate: 1,
+      gongfaExpMultiplier: 1,
+      skillProficiencyMultiplier: 1,
+    },
     shenshi: 1,
     bodyStrength: 1,
     combat: {

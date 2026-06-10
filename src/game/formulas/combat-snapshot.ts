@@ -1,9 +1,7 @@
-import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
-import type { Player } from '@/game/models/player'
 import type { ElementType } from '@/game/types'
 
 /**
- * 战前聚合战斗快照（境界 + 功法 + 后续法宝/Buff 的统一入口）
+ * 战前聚合战斗快照（境界 + 主修功法 + 永久被动 + 后续法宝/Buff）
  * 遇怪或回合开始前构建，回合内只读
  */
 export interface CombatSnapshot {
@@ -21,30 +19,12 @@ export interface CombatSnapshot {
   hitRate: number
   /** 穿透 */
   penetration: number
+  /** 韧性，降低被暴击概率 */
+  tenacity: number
+  /** 受击减伤（小数） */
+  damageReduction: number
   /** 受击时的防御五行（灵根主属性 → 功法主五行） */
   defenseElement: ElementType
-  /** 默认攻击五行（普攻 / 技能 fallback） */
+  /** 默认攻击五行（技能无显式属性时的 fallback，普攻不参与五行克制） */
   primaryAttackElement: ElementType
-}
-
-/**
- * 根据玩家与当前主修功法构建战斗快照
- * @param player 玩家实体
- * @param gongfa 当前装备功法
- */
-export function buildCombatSnapshot(player: Player, gongfa: Gongfa): CombatSnapshot {
-  const { combat } = player
-  const primaryAttackElement = getGongfaPrimaryElement(gongfa)
-
-  return {
-    attack: combat.attack + gongfa.attackBonus,
-    defense: combat.defense + gongfa.defenseBonus,
-    speed: combat.speed,
-    critRate: combat.critRate,
-    critDamage: combat.critDamage,
-    hitRate: combat.hitRate,
-    penetration: combat.penetration,
-    defenseElement: player.spiritRootElements[0] ?? primaryAttackElement,
-    primaryAttackElement,
-  }
 }

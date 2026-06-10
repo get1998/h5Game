@@ -5,6 +5,7 @@ import {
   type Dongfu,
 } from '@/game/models/dongfu'
 import { applyLingqiRecovery } from '@/game/systems/lingqi'
+import { checkDongfuUpgrade, upgradeDongfu } from '@/game/systems/dongfu-upgrade'
 import type { IdleState } from '@/game/types'
 import { createDefaultIdleState, loadSave } from '@/stores/save'
 import { usePlayerStore } from '@/stores/player'
@@ -36,7 +37,7 @@ export const useDongfuStore = defineStore('dongfu', {
   getters: {
     /** 洞府展示信息 */
     dongfuDisplay(state) {
-      return buildDongfuDisplay(state.dongfu)
+      return buildDongfuDisplay(state.dongfu, usePlayerStore().inventory)
     },
     /** 是否修炼中 */
     isCultivating(state): boolean {
@@ -70,6 +71,43 @@ export const useDongfuStore = defineStore('dongfu', {
       const result = applyLingqiRecovery(this.dongfu, elapsed, false, now)
       this.dongfu = result.dongfu
       usePlayerStore().save()
+    },
+    /**
+     * 暂停灵气恢复计时：先结算在线时段，再冻结锚点
+     */
+    pauseLingqiRecoveryClock(now = Date.now()) {
+      this.tickLingqiRecovery(now)
+    },
+    /**
+     * 恢复灵气恢复计时（不把关闭标签/浏览器间隔折算为恢复量）
+     */
+    resumeLingqiRecoveryClock(now = Date.now()) {
+      this.dongfu = {
+        ...this.dongfu,
+        lastLingqiTickAt: now,
+      }
+      usePlayerStore().save()
+    },
+    /** 检测洞府是否可升级 */
+    checkUpgrade() {
+      const playerStore = usePlayerStore()
+      return checkDongfuUpgrade(this.dongfu, playerStore.inventory)
+    },
+    /** 升级洞府 */
+    upgradeDongfuLevel() {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法升级洞府' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = upgradeDongfu(this.dongfu, playerStore.inventory)
+
+      if (result.success && result.dongfu) {
+        this.dongfu = result.dongfu
+        playerStore.save()
+      }
+
+      return result
     },
     /** 重置洞府与闭关状态 */
     resetState() {

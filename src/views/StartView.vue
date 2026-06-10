@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { hasReincarnationBonus } from '@/game/models/reincarnation'
 import { usePlayerStore } from '@/stores/player'
 import { useGameStore } from '@/stores/game'
 
@@ -9,11 +10,37 @@ const playerStore = usePlayerStore()
 const gameStore = useGameStore()
 
 const hasSave = computed(() => playerStore.hasSave)
+const isAwaitingReincarnation = computed(() => playerStore.isAwaitingReincarnation)
+const lastLife = computed(() => playerStore.reincarnation.lastLife)
+const nextGeneration = computed(() => playerStore.nextReincarnationGeneration)
+const hasInheritedBonus = computed(() => hasReincarnationBonus(playerStore.reincarnation))
+
+const inheritedCombatText = computed(() => {
+  const bonus = playerStore.reincarnation.combat
+  const parts: string[] = []
+  if (bonus.attack > 0) parts.push(`攻击 +${bonus.attack}`)
+  if (bonus.maxHp > 0) parts.push(`气血 +${bonus.maxHp}`)
+  if (bonus.defense > 0) parts.push(`防御 +${bonus.defense}`)
+  return parts.join(' · ') || '暂无战斗加成'
+})
+
+const inheritedCultivationText = computed(() => {
+  const bonus = playerStore.reincarnation.cultivation
+  const parts: string[] = []
+  if (bonus.absorptionRate > 0) parts.push(`吸收 +${bonus.absorptionRate}`)
+  if (bonus.conversionRate > 0) parts.push(`转化 +${bonus.conversionRate}`)
+  return parts.join(' · ') || '暂无修炼加成'
+})
+
+onMounted(() => {
+  playerStore.checkAndSettleLifespanEnd()
+})
 
 /**
- * 进入游戏：有存档则进洞府，无存档则去角色创建
+ * 进入游戏：有存档且寿元未尽则进洞府，无存档则去角色创建
  */
 function handleEnterGame() {
+  if (isAwaitingReincarnation.value) return
   if (hasSave.value) {
     router.push('/home')
   } else {
@@ -22,11 +49,19 @@ function handleEnterGame() {
 }
 
 /**
+ * 寿元用尽后再入轮回
+ */
+function handleReincarnate() {
+  if (!isAwaitingReincarnation.value) return
+  router.push({ path: '/create', query: { reincarnate: '1' } })
+}
+
+/**
  * 重新开始：清除存档与游戏状态，重新创建角色
  */
 function handleRestart() {
   if (hasSave.value) {
-    const confirmed = window.confirm('确定重新开始？当前存档将被清除，此操作不可恢复。')
+    const confirmed = window.confirm('确定重新开始？当前存档与轮回记录将被清除，此操作不可恢复。')
     if (!confirmed) return
   }
   playerStore.resetSave()
@@ -45,8 +80,33 @@ function handleRestart() {
         <p class="start-header__desc">踏入仙途，修炼悟道，斩妖除魔</p>
       </header>
 
+      <section v-if="isAwaitingReincarnation" class="start-reincarnation">
+        <p class="start-reincarnation__title">寿元已尽，道消身陨</p>
+        <p v-if="lastLife" class="start-reincarnation__life">
+          上一世「{{ lastLife.name }}」修行至 {{ lastLife.realm }}，享年 {{ lastLife.age }} 岁
+        </p>
+        <p class="start-reincarnation__hint">
+          可再入轮回，开启第 {{ nextGeneration }} 世；各世继承前世基础属性 10%，多世累加
+        </p>
+        <div v-if="hasInheritedBonus" class="start-reincarnation__bonus">
+          <p class="start-reincarnation__bonus-line">轮回战斗加成：{{ inheritedCombatText }}</p>
+          <p class="start-reincarnation__bonus-line">轮回修炼加成：{{ inheritedCultivationText }}</p>
+        </div>
+      </section>
+
       <div class="start-actions">
-        <button class="game-btn game-btn--primary start-actions__btn" @click="handleEnterGame">
+        <button
+          v-if="isAwaitingReincarnation"
+          class="game-btn game-btn--primary start-actions__btn"
+          @click="handleReincarnate"
+        >
+          再入轮回
+        </button>
+        <button
+          v-else
+          class="game-btn game-btn--primary start-actions__btn"
+          @click="handleEnterGame"
+        >
           进入游戏
         </button>
         <button class="game-btn game-btn--secondary start-actions__btn" @click="handleRestart">
@@ -54,7 +114,7 @@ function handleRestart() {
         </button>
       </div>
 
-      <p v-if="hasSave" class="start-hint">检测到已有存档，可直接进入游戏</p>
+      <p v-if="hasSave && !isAwaitingReincarnation" class="start-hint">检测到已有存档，可直接进入游戏</p>
     </div>
   </div>
 </template>
@@ -111,6 +171,51 @@ function handleRestart() {
   color: $color-text-muted;
 }
 
+.start-reincarnation {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid rgba($color-primary, 0.35);
+  border-radius: 8px;
+  background: rgba($color-primary, 0.06);
+  text-align: left;
+}
+
+.start-reincarnation__title {
+  font-size: 15px;
+  color: $color-primary;
+  font-weight: 600;
+}
+
+.start-reincarnation__life {
+  margin-top: 10px;
+  font-size: 13px;
+  color: $color-text;
+  line-height: 1.6;
+}
+
+.start-reincarnation__hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: $color-text-muted;
+  line-height: 1.6;
+}
+
+.start-reincarnation__bonus {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba($color-primary, 0.2);
+}
+
+.start-reincarnation__bonus-line {
+  font-size: 12px;
+  color: $color-text-muted;
+  line-height: 1.6;
+}
+
+.start-reincarnation__bonus-line + .start-reincarnation__bonus-line {
+  margin-top: 4px;
+}
+
 .start-actions {
   display: flex;
   flex-direction: column;
@@ -125,6 +230,7 @@ function handleRestart() {
   width: 100%;
   min-height: 48px;
   font-size: 16px;
+  cursor: pointer;
 }
 
 .start-hint {

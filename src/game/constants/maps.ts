@@ -1,18 +1,14 @@
+import { MANGHUANG_MONSTER_KIND_WEIGHTS } from '@/game/constants/combat-balance'
 import type { ElementType, RealmStage } from '@/game/types'
+import {
+  BEAST_ARCHETYPE,
+  HUMAN_ARCHETYPE,
+  beastMonsterStats,
+  humanMonsterStats,
+  type MonsterStatModifiers,
+} from '@/game/constants/monster-stat-modifiers'
 
-/** 怪物个体属性修正（叠加在境界+功法+品阶之后） */
-export interface MonsterStatModifiers {
-  maxHp?: number
-  maxMp?: number
-  attack?: number
-  defense?: number
-  speed?: number
-  critRate?: number
-  critDamage?: number
-  hitRate?: number
-  dodgeRate?: number
-  penetration?: number
-}
+export type { MonsterStatModifiers } from '@/game/constants/monster-stat-modifiers'
 
 /** 地图功法掉落项 */
 export interface MapGongfaDrop {
@@ -23,8 +19,19 @@ export interface MapGongfaDrop {
   rate: number
 }
 
-/** 地图掉落物（可扩展更多类型） */
-export type MapDropItem = MapGongfaDrop
+/** 地图物品掉落项 */
+export interface MapItemDrop {
+  type: 'item'
+  /** 物品 id */
+  itemId: string
+  /** 掉落概率（0~1） */
+  rate: number
+  /** 掉落数量（默认 1） */
+  count?: number
+}
+
+/** 地图掉落物 */
+export type MapDropItem = MapGongfaDrop | MapItemDrop
 
 /** 怪物模板公共字段（境界、品阶均在遇怪时随机生成） */
 interface MonsterTemplateBase {
@@ -88,24 +95,27 @@ export interface TrainingMap {
   monsters: MonsterTemplate[]
 }
 
-/** 炼气初期：人型为主，妖兽稀少 */
-const QI_EARLY_KIND_RATES: MapMonsterKindRates = { 人: 1, 妖兽: 0.2, 灵兽: 0.1 }
+/** 莽荒大陆基准：妖兽权重 1，人修与灵兽见 combat-balance.ts */
+const MANGHUANG_KIND = MANGHUANG_MONSTER_KIND_WEIGHTS
+
+/** 炼气初期：妖兽绝对多数，人修少见，灵兽极稀 */
+const QI_EARLY_KIND_RATES: MapMonsterKindRates = { ...MANGHUANG_KIND }
 const QI_EARLY_TIER_RATES: MapMonsterTierRates = { 普通: 0.78, 精英: 0.18, 首领: 0.03, 传奇: 0.01 }
 
 /** 炼气中后期 */
-const QI_MID_KIND_RATES: MapMonsterKindRates = { 人: 0.85, 妖兽: 0.3, 灵兽: 0.18 }
+const QI_MID_KIND_RATES: MapMonsterKindRates = { 妖兽: 1, 人: 0.2, 灵兽: 0.05 }
 const QI_MID_TIER_RATES: MapMonsterTierRates = { 普通: 0.74, 精英: 0.2, 首领: 0.05, 传奇: 0.01 }
 
 /** 炼气末期 */
-const QI_LATE_KIND_RATES: MapMonsterKindRates = { 人: 0.75, 妖兽: 0.35, 灵兽: 0.22 }
+const QI_LATE_KIND_RATES: MapMonsterKindRates = { 妖兽: 1, 人: 0.18, 灵兽: 0.06 }
 const QI_LATE_TIER_RATES: MapMonsterTierRates = { 普通: 0.7, 精英: 0.22, 首领: 0.06, 传奇: 0.02 }
 
 /** 筑基期 */
-const ZHUJI_KIND_RATES: MapMonsterKindRates = { 人: 0.7, 妖兽: 0.4, 灵兽: 0.25 }
+const ZHUJI_KIND_RATES: MapMonsterKindRates = { 妖兽: 1, 人: 0.16, 灵兽: 0.08 }
 const ZHUJI_TIER_RATES: MapMonsterTierRates = { 普通: 0.68, 精英: 0.22, 首领: 0.08, 传奇: 0.02 }
 
 /** 金丹期 */
-const JINDAN_KIND_RATES: MapMonsterKindRates = { 人: 0.6, 妖兽: 0.5, 灵兽: 0.3 }
+const JINDAN_KIND_RATES: MapMonsterKindRates = { 妖兽: 1, 人: 0.14, 灵兽: 0.1 }
 const JINDAN_TIER_RATES: MapMonsterTierRates = { 普通: 0.65, 精英: 0.22, 首领: 0.1, 传奇: 0.03 }
 
 /** 凡品五行功法掉落（炼气初期地图共用） */
@@ -117,13 +127,26 @@ const QI_EARLY_GONGFA_DROPS: MapGongfaDrop[] = [
   { type: 'gongfa', gongfaId: 'gongfa_jiantu', rate: 0.08 },
 ]
 
+/** 炼气初期常见物品掉落 */
+const QI_EARLY_ITEM_DROPS: MapItemDrop[] = [
+  { type: 'item', itemId: 'item_julingcao', rate: 0.12 },
+  { type: 'item', itemId: 'item_lingshi_suipian', rate: 0.08, count: 2 },
+]
+
+/** 炼气中后期物品掉落 */
+const QI_MID_ITEM_DROPS: MapItemDrop[] = [
+  { type: 'item', itemId: 'item_julingcao', rate: 0.1 },
+  { type: 'item', itemId: 'item_lingshi_suipian', rate: 0.1, count: 3 },
+  { type: 'item', itemId: 'item_yaodan_canque', rate: 0.04 },
+]
+
 /** 历练地图列表 */
 export const TRAINING_MAPS: TrainingMap[] = [
   // ── 炼气期 ──────────────────────────────────────────
   {
     id: 'map_qingling',
     name: '青灵山',
-    description: '宗门外围青山，小径平缓、妖兽孱弱，适合炼气初阶修士熟悉历练。',
+    description: '莽荒大陆东缘浅山，妖兽占野路七八成，同境小妖亦非易与，适合炼气初阶修士试探身手。',
     requiredRealm: '炼气一层',
     minMonsterRealm: '炼气一层',
     maxMonsterRealm: '炼气四层',
@@ -131,7 +154,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
     monsterTierRates: QI_EARLY_TIER_RATES,
     roundIntervalMs: 820,
     encounterDelayMs: 1200,
-    drops: QI_EARLY_GONGFA_DROPS,
+    drops: [...QI_EARLY_GONGFA_DROPS, ...QI_EARLY_ITEM_DROPS],
     monsters: [
       {
         id: 'monster_bandit',
@@ -139,11 +162,23 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '人',
         element: '金',
         spawnRate: 1.2,
-        statModifiers: {
-          maxHp: -15,
-          defense: -2,
-          hitRate: -0.05,
-        },
+        statModifiers: humanMonsterStats('金'),
+      },
+      {
+        id: 'monster_bandit_water',
+        name: '山贼',
+        kind: '人',
+        element: '水',
+        spawnRate: 1.2,
+        statModifiers: humanMonsterStats('水'),
+      },
+      {
+        id: 'monster_bandit_fire',
+        name: '山贼',
+        kind: '人',
+        element: '火',
+        spawnRate: 1.2,
+        statModifiers: humanMonsterStats('火'),
       },
       {
         id: 'monster_wolf',
@@ -151,13 +186,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '木',
         spawnRate: 0.9,
-        statModifiers: {
-          maxHp: -30,
-          maxMp: -10,
-          defense: -3,
-          speed: 4,
-          dodgeRate: 0.03,
-        },
+        statModifiers: beastMonsterStats('木', BEAST_ARCHETYPE.predator),
       },
       {
         id: 'monster_rabbit',
@@ -165,14 +194,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '木',
         spawnRate: 1,
-        statModifiers: {
-          maxHp: -18,
-          attack: -2,
-          defense: -3,
-          speed: 8,
-          dodgeRate: 0.06,
-          critDamage: -0.1,
-        },
+        statModifiers: beastMonsterStats('木', BEAST_ARCHETYPE.agile),
       },
       {
         id: 'monster_wild_dog',
@@ -180,13 +202,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '土',
         spawnRate: 0.85,
-        statModifiers: {
-          maxHp: -25,
-          attack: -3,
-          defense: -2,
-          speed: 5,
-          hitRate: -0.03,
-        },
+        statModifiers: beastMonsterStats('土', BEAST_ARCHETYPE.guard),
       },
     ],
   },
@@ -209,6 +225,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
       { type: 'gongfa', gongfaId: 'gongfa_jiantu', rate: 0.06 },
       { type: 'gongfa', gongfaId: 'gongfa_liehuo', rate: 0.02 },
       { type: 'gongfa', gongfaId: 'gongfa_houdu', rate: 0.02 },
+      ...QI_MID_ITEM_DROPS,
     ],
     monsters: [
       {
@@ -217,11 +234,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '人',
         element: '火',
         spawnRate: 1.1,
-        statModifiers: {
-          attack: 1,
-          defense: -1,
-          critRate: 0.01,
-        },
+        statModifiers: humanMonsterStats('火'),
       },
       {
         id: 'monster_iron_lizard',
@@ -229,12 +242,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '土',
         spawnRate: 0.95,
-        statModifiers: {
-          maxHp: 10,
-          maxMp: -15,
-          defense: 4,
-          speed: -3,
-        },
+        statModifiers: beastMonsterStats('土', BEAST_ARCHETYPE.shell),
       },
       {
         id: 'monster_wind_hawk',
@@ -242,13 +250,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '金',
         spawnRate: 0.9,
-        statModifiers: {
-          maxHp: -20,
-          attack: 2,
-          speed: 6,
-          critRate: 0.02,
-          dodgeRate: 0.04,
-        },
+        statModifiers: beastMonsterStats('金', BEAST_ARCHETYPE.raptor),
       },
       {
         id: 'monster_stone_golem',
@@ -256,13 +258,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '灵兽',
         element: '土',
         spawnRate: 0.65,
-        statModifiers: {
-          maxHp: 25,
-          maxMp: -20,
-          attack: -2,
-          defense: 6,
-          speed: -5,
-        },
+        statModifiers: beastMonsterStats('土', BEAST_ARCHETYPE.golem),
       },
     ],
   },
@@ -293,13 +289,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '水',
         spawnRate: 1,
-        statModifiers: {
-          maxHp: 15,
-          attack: 3,
-          defense: 2,
-          speed: -2,
-          penetration: 2,
-        },
+        statModifiers: beastMonsterStats('水', BEAST_ARCHETYPE.swamp),
       },
       {
         id: 'monster_miasma_spider',
@@ -307,14 +297,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '木',
         spawnRate: 0.9,
-        statModifiers: {
-          maxHp: -10,
-          attack: 2,
-          speed: 4,
-          critRate: 0.02,
-          critDamage: 0.15,
-          penetration: 3,
-        },
+        statModifiers: beastMonsterStats('木', BEAST_ARCHETYPE.venom),
       },
       {
         id: 'monster_water_wraith',
@@ -322,12 +305,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '灵兽',
         element: '水',
         spawnRate: 0.7,
-        statModifiers: {
-          maxMp: 15,
-          speed: 5,
-          dodgeRate: 0.05,
-          hitRate: -0.03,
-        },
+        statModifiers: beastMonsterStats('水', BEAST_ARCHETYPE.wraith),
       },
       {
         id: 'monster_marsh_cultivator',
@@ -335,12 +313,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '人',
         element: '水',
         spawnRate: 1.05,
-        statModifiers: {
-          attack: 2,
-          defense: 1,
-          speed: 2,
-          penetration: 2,
-        },
+        statModifiers: humanMonsterStats('水'),
       },
     ],
   },
@@ -371,13 +344,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '人',
         element: '火',
         spawnRate: 1,
-        statModifiers: {
-          attack: 4,
-          speed: 3,
-          critRate: 0.02,
-          critDamage: 0.15,
-          penetration: 4,
-        },
+        statModifiers: humanMonsterStats('火', HUMAN_ARCHETYPE.heretic),
       },
       {
         id: 'monster_bone_spirit',
@@ -385,13 +352,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '灵兽',
         element: '金',
         spawnRate: 0.68,
-        statModifiers: {
-          maxMp: 20,
-          attack: 3,
-          speed: 4,
-          dodgeRate: 0.04,
-          penetration: 3,
-        },
+        statModifiers: beastMonsterStats('金', BEAST_ARCHETYPE.boneSpirit),
       },
       {
         id: 'monster_crimson_bat',
@@ -399,13 +360,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '火',
         spawnRate: 0.95,
-        statModifiers: {
-          maxHp: -15,
-          attack: 5,
-          speed: 7,
-          critRate: 0.03,
-          critDamage: 0.2,
-        },
+        statModifiers: beastMonsterStats('火', BEAST_ARCHETYPE.bat),
       },
       {
         id: 'monster_rock_turtle',
@@ -413,13 +368,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '土',
         spawnRate: 0.8,
-        statModifiers: {
-          maxHp: 40,
-          maxMp: -25,
-          attack: -3,
-          defense: 8,
-          speed: -6,
-        },
+        statModifiers: beastMonsterStats('土', BEAST_ARCHETYPE.turtle),
       },
     ],
   },
@@ -451,15 +400,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '水',
         spawnRate: 1,
-        statModifiers: {
-          maxHp: -60,
-          maxMp: -8,
-          defense: -2,
-          speed: 3,
-          critRate: 0.01,
-          critDamage: 0.1,
-          penetration: 2,
-        },
+        statModifiers: beastMonsterStats('水', BEAST_ARCHETYPE.venom),
       },
       {
         id: 'monster_ghost',
@@ -467,11 +408,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '灵兽',
         element: '木',
         spawnRate: 0.72,
-        statModifiers: {
-          maxMp: 20,
-          speed: 6,
-          dodgeRate: 0.03,
-        },
+        statModifiers: beastMonsterStats('木', BEAST_ARCHETYPE.wraith),
       },
       {
         id: 'monster_mist_bandit',
@@ -479,11 +416,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '人',
         element: '木',
         spawnRate: 1,
-        statModifiers: {
-          attack: 2,
-          speed: 3,
-          dodgeRate: 0.02,
-        },
+        statModifiers: humanMonsterStats('木'),
       },
       {
         id: 'monster_poison_vine',
@@ -491,13 +424,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '木',
         spawnRate: 0.88,
-        statModifiers: {
-          maxHp: -20,
-          attack: 3,
-          speed: 2,
-          critRate: 0.02,
-          penetration: 3,
-        },
+        statModifiers: beastMonsterStats('木', BEAST_ARCHETYPE.vine),
       },
       {
         id: 'monster_swamp_toad',
@@ -505,12 +432,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '水',
         spawnRate: 0.85,
-        statModifiers: {
-          maxHp: 20,
-          maxMp: -10,
-          defense: 3,
-          speed: -2,
-        },
+        statModifiers: beastMonsterStats('水', BEAST_ARCHETYPE.toad),
       },
     ],
   },
@@ -539,13 +461,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '火',
         spawnRate: 1,
-        statModifiers: {
-          attack: 4,
-          speed: 2,
-          critRate: 0.02,
-          critDamage: 0.2,
-          penetration: 5,
-        },
+        statModifiers: beastMonsterStats('火', BEAST_ARCHETYPE.salamander),
       },
       {
         id: 'monster_scorpion',
@@ -553,16 +469,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         element: '火',
         kind: '妖兽',
         spawnRate: 0.75,
-        statModifiers: {
-          maxHp: -120,
-          maxMp: -40,
-          attack: -7,
-          defense: -12,
-          speed: -5,
-          critRate: 0.04,
-          critDamage: 0.3,
-          penetration: 8,
-        },
+        statModifiers: beastMonsterStats('火', BEAST_ARCHETYPE.scorpion),
       },
       {
         id: 'monster_lava_worm',
@@ -570,13 +477,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '火',
         spawnRate: 0.92,
-        statModifiers: {
-          maxHp: -40,
-          attack: 5,
-          speed: 4,
-          critRate: 0.02,
-          penetration: 4,
-        },
+        statModifiers: beastMonsterStats('火', BEAST_ARCHETYPE.worm),
       },
       {
         id: 'monster_flame_spirit',
@@ -584,12 +485,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '灵兽',
         element: '火',
         spawnRate: 0.65,
-        statModifiers: {
-          maxMp: 30,
-          attack: 3,
-          speed: 5,
-          dodgeRate: 0.04,
-        },
+        statModifiers: beastMonsterStats('火', BEAST_ARCHETYPE.spirit),
       },
       {
         id: 'monster_magma_golem',
@@ -597,13 +493,7 @@ export const TRAINING_MAPS: TrainingMap[] = [
         kind: '妖兽',
         element: '土',
         spawnRate: 0.78,
-        statModifiers: {
-          maxHp: 50,
-          maxMp: -30,
-          attack: -2,
-          defense: 10,
-          speed: -4,
-        },
+        statModifiers: beastMonsterStats('土', BEAST_ARCHETYPE.golem),
       },
     ],
   },

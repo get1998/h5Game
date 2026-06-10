@@ -6,6 +6,8 @@ import {
   formatSkillDescription,
   getSkillProficiency,
   getSkillsByGongfaId,
+  isCastableSkill,
+  isPermanentPassiveSkill,
   SKILL_CATEGORY_LABEL,
 } from '@/game/models/skill'
 import { useGameStore } from '@/stores/game'
@@ -22,31 +24,47 @@ const gameStore = useGameStore()
 
 /** 功法技能区折叠状态，默认展开 */
 const skillsExpandedMap = ref<Record<string, boolean>>({})
+const passiveExpandedMap = ref<Record<string, boolean>>({})
+
+function mapSkillItem(
+  gongfa: { level: number; skillProficiency: Record<string, number> },
+  skill: ReturnType<typeof getSkillsByGongfaId>[number],
+) {
+  const isUnlocked = gongfa.level >= skill.minLevel
+  const isPassive = isPermanentPassiveSkill(skill)
+  const proficiency = getSkillProficiency(gongfa.skillProficiency, skill.id)
+  const progress = calcSkillProficiencyProgress(proficiency)
+
+  return {
+    id: skill.id,
+    name: skill.name,
+    typeLabel: SKILL_TYPE_LABEL[skill.type] ?? skill.type,
+    categoryLabel: SKILL_CATEGORY_LABEL[skill.category] ?? skill.category,
+    effect: formatSkillDescription(skill, isUnlocked ? proficiency : 0),
+    minLevel: skill.minLevel,
+    unlockText: `功法 ${skill.minLevel} 级领悟`,
+    isUnlocked,
+    isPassive,
+    permanentText: isPassive && isUnlocked ? '已领悟 · 永久生效' : '',
+    itemClass: isUnlocked
+      ? 'gongfa-skill gongfa-skill--unlocked'
+      : 'gongfa-skill gongfa-skill--locked',
+    proficiencyPercent: progress.percent,
+    proficiencyBarStyle: progress.barStyle,
+    proficiencyText: isUnlocked && !isPassive ? progress.progressText : '',
+    levelText: isUnlocked && !isPassive ? progress.levelText : '',
+  }
+}
 
 const gongfaItems = computed(() =>
   playerStore.gongfaList.map((gongfa) => {
-    const skills = getSkillsByGongfaId(gongfa.id).map((skill) => {
-      const isUnlocked = gongfa.level >= skill.minLevel
-      const proficiency = getSkillProficiency(gongfa.skillProficiency, skill.id)
-      const progress = calcSkillProficiencyProgress(proficiency)
-
-      return {
-        id: skill.id,
-        name: skill.name,
-        typeLabel: SKILL_TYPE_LABEL[skill.type] ?? skill.type,
-        categoryLabel: SKILL_CATEGORY_LABEL[skill.category] ?? skill.category,
-        effect: formatSkillDescription(skill, isUnlocked ? proficiency : 0),
-        minLevel: skill.minLevel,
-        isUnlocked,
-        itemClass: isUnlocked
-          ? 'gongfa-skill gongfa-skill--unlocked'
-          : 'gongfa-skill gongfa-skill--locked',
-        proficiencyPercent: progress.percent,
-        proficiencyBarStyle: progress.barStyle,
-        proficiencyText: isUnlocked ? progress.progressText : '',
-        levelText: isUnlocked ? progress.levelText : '',
-      }
-    })
+    const allSkills = getSkillsByGongfaId(gongfa.id)
+    const castSkills = allSkills
+      .filter((skill) => isCastableSkill(skill))
+      .map((skill) => mapSkillItem(gongfa, skill))
+    const passiveSkills = allSkills
+      .filter((skill) => isPermanentPassiveSkill(skill))
+      .map((skill) => mapSkillItem(gongfa, skill))
 
     return {
       ...gongfa,
@@ -63,12 +81,20 @@ const gongfaItems = computed(() =>
       levelText: gongfa.level >= gongfa.maxLevel
         ? '圆满'
         : `${gongfa.level} / ${gongfa.maxLevel}`,
-      skills,
+      castSkills,
+      passiveSkills,
       skillsExpanded: skillsExpandedMap.value[gongfa.id] ?? true,
       skillsBodyClass: (skillsExpandedMap.value[gongfa.id] ?? true)
         ? 'gongfa-skills__body gongfa-skills__body--expanded'
         : 'gongfa-skills__body',
       skillsChevronClass: (skillsExpandedMap.value[gongfa.id] ?? true)
+        ? 'gongfa-skills__chevron gongfa-skills__chevron--expanded'
+        : 'gongfa-skills__chevron',
+      passiveExpanded: passiveExpandedMap.value[gongfa.id] ?? true,
+      passiveBodyClass: (passiveExpandedMap.value[gongfa.id] ?? true)
+        ? 'gongfa-skills__body gongfa-skills__body--expanded'
+        : 'gongfa-skills__body',
+      passiveChevronClass: (passiveExpandedMap.value[gongfa.id] ?? true)
         ? 'gongfa-skills__chevron gongfa-skills__chevron--expanded'
         : 'gongfa-skills__chevron',
     }
@@ -81,13 +107,25 @@ function selectGongfa(gongfaId: string) {
 }
 
 /**
- * 切换功法技能列表折叠状态
+ * 切换功法主动技能列表折叠状态
  * @param gongfaId 功法 id
  */
 function toggleSkills(gongfaId: string) {
   const expanded = skillsExpandedMap.value[gongfaId] ?? true
   skillsExpandedMap.value = {
     ...skillsExpandedMap.value,
+    [gongfaId]: !expanded,
+  }
+}
+
+/**
+ * 切换功法永久被动列表折叠状态
+ * @param gongfaId 功法 id
+ */
+function togglePassiveSkills(gongfaId: string) {
+  const expanded = passiveExpandedMap.value[gongfaId] ?? true
+  passiveExpandedMap.value = {
+    ...passiveExpandedMap.value,
     [gongfaId]: !expanded,
   }
 }
@@ -122,22 +160,23 @@ function toggleSkills(gongfaId: string) {
         <div class="progress-bar__fill" :style="item.expBarStyle" />
       </div>
       <p class="gongfa-item__exp">功法经验 {{ item.expPercent }}%</p>
+
       <div
-        v-if="item.skills.length"
-        class="gongfa-skills"
+        v-if="item.passiveSkills.length"
+        class="gongfa-skills gongfa-skills--passive"
         @click.stop
       >
         <div
           class="gongfa-skills__title-row"
-          @click="toggleSkills(item.id)"
+          @click="togglePassiveSkills(item.id)"
         >
-          <p class="gongfa-skills__title">功法技能</p>
-          <span :class="item.skillsChevronClass" aria-hidden="true" />
+          <p class="gongfa-skills__title">永久被动（领悟后永久生效）</p>
+          <span :class="item.passiveChevronClass" aria-hidden="true" />
         </div>
-        <div :class="item.skillsBodyClass">
+        <div :class="item.passiveBodyClass">
           <div class="gongfa-skills__body-inner">
             <div
-              v-for="skill in item.skills"
+              v-for="skill in item.passiveSkills"
               :key="skill.id"
               :class="skill.itemClass"
             >
@@ -145,6 +184,38 @@ function toggleSkills(gongfaId: string) {
                 <span class="gongfa-skill__name">{{ skill.name }}</span>
                 <span class="gongfa-skill__type">{{ skill.typeLabel }} · {{ skill.categoryLabel }}</span>
               </div>
+              <p class="gongfa-skill__unlock">{{ skill.unlockText }}</p>
+              <p class="gongfa-skill__effect">{{ skill.effect }}</p>
+              <p v-if="skill.permanentText" class="gongfa-skill__permanent">{{ skill.permanentText }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="item.castSkills.length"
+        class="gongfa-skills"
+        @click.stop
+      >
+        <div
+          class="gongfa-skills__title-row"
+          @click="toggleSkills(item.id)"
+        >
+          <p class="gongfa-skills__title">主动 / 绝技（装备后战斗使用）</p>
+          <span :class="item.skillsChevronClass" aria-hidden="true" />
+        </div>
+        <div :class="item.skillsBodyClass">
+          <div class="gongfa-skills__body-inner">
+            <div
+              v-for="skill in item.castSkills"
+              :key="skill.id"
+              :class="skill.itemClass"
+            >
+              <div class="gongfa-skill__header">
+                <span class="gongfa-skill__name">{{ skill.name }}</span>
+                <span class="gongfa-skill__type">{{ skill.typeLabel }} · {{ skill.categoryLabel }}</span>
+              </div>
+              <p class="gongfa-skill__unlock">{{ skill.unlockText }}</p>
               <p class="gongfa-skill__effect">{{ skill.effect }}</p>
               <template v-if="skill.isUnlocked">
                 <div class="progress-bar progress-bar--skill">
@@ -152,13 +223,11 @@ function toggleSkills(gongfaId: string) {
                 </div>
                 <p class="gongfa-skill__proficiency">{{ skill.proficiencyText }}</p>
               </template>
-              <p v-else class="gongfa-skill__level">
-                功法 {{ skill.minLevel }} 级领悟
-              </p>
             </div>
           </div>
         </div>
       </div>
+
       <p v-if="item.permanentPassive" class="gongfa-item__passive">
         圆满被动：{{ item.permanentPassive }}
       </p>
@@ -240,6 +309,10 @@ function toggleSkills(gongfaId: string) {
   border-top: 1px solid $color-bg-elevated;
 }
 
+.gongfa-skills--passive {
+  border-top-color: rgba($color-primary, 0.25);
+}
+
 .gongfa-skills__title-row {
   display: flex;
   align-items: center;
@@ -252,6 +325,10 @@ function toggleSkills(gongfaId: string) {
   font-size: 12px;
   color: $color-text-muted;
   margin-bottom: 0;
+}
+
+.gongfa-skills--passive .gongfa-skills__title {
+  color: $color-primary-dim;
 }
 
 .gongfa-skills__chevron {
@@ -322,10 +399,23 @@ function toggleSkills(gongfaId: string) {
   color: $color-primary;
 }
 
+.gongfa-skill__unlock {
+  font-size: 11px;
+  color: $color-primary-dim;
+}
+
 .gongfa-skill__effect {
+  margin-top: 4px;
   font-size: 12px;
   color: $color-text-muted;
   line-height: 1.4;
+}
+
+.gongfa-skill__permanent {
+  margin-top: 4px;
+  font-size: 11px;
+  color: $color-primary;
+  text-align: right;
 }
 
 .progress-bar--skill {
@@ -337,13 +427,6 @@ function toggleSkills(gongfaId: string) {
 }
 
 .gongfa-skill__proficiency {
-  margin-top: 4px;
-  font-size: 11px;
-  color: $color-text-muted;
-  text-align: right;
-}
-
-.gongfa-skill__level {
   margin-top: 4px;
   font-size: 11px;
   color: $color-text-muted;

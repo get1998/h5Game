@@ -1,4 +1,12 @@
-import { getDongfuLevelConfig, getDongfuMaxLingqi } from '@/game/constants/dongfu'
+import {
+  getDongfuLevelConfig,
+  getDongfuMaxLingqi,
+  getDongfuUpgradeTarget,
+} from '@/game/constants/dongfu'
+import { getDongfuTreasureMinDropRealm } from '@/game/constants/dongfu-treasure'
+import { getItemDefinition } from '@/game/constants/items'
+import { getItemCount } from '@/game/systems/inventory'
+import type { InventoryState } from '@/game/models/item'
 import { calcLingqiRecoveryPerSec } from '@/game/systems/lingqi'
 import { getZhenfaLevelConfig } from '@/game/constants/zhenfa'
 
@@ -46,14 +54,17 @@ export function normalizeDongfu(raw?: Partial<Dongfu>): Dongfu {
 /**
  * 洞府展示信息
  */
-export function buildDongfuDisplay(dongfu: Dongfu) {
+export function buildDongfuDisplay(dongfu: Dongfu, inventory?: InventoryState) {
   const config = getDongfuLevelConfig(dongfu.level)
   const zhenfa = getZhenfaLevelConfig(dongfu.zhenfaLevel)
   const maxLingqi = config.maxLingqi
   const lingqiPercent = maxLingqi > 0 ? Math.floor((dongfu.lingqi / maxLingqi) * 100) : 0
+  const upgradeTarget = getDongfuUpgradeTarget(dongfu.level)
+
   return {
     level: dongfu.level,
     name: config.name,
+    anchorRealm: config.anchorRealm,
     lingqi: Math.floor(dongfu.lingqi),
     maxLingqi,
     lingqiPercent,
@@ -61,5 +72,17 @@ export function buildDongfuDisplay(dongfu: Dongfu) {
     zhenfaName: zhenfa.name,
     recoveryPerSec: calcLingqiRecoveryPerSec(dongfu, false),
     recoveryPerSecCultivating: calcLingqiRecoveryPerSec(dongfu, true),
+    nextLevel: upgradeTarget?.level ?? null,
+    nextName: upgradeTarget?.name ?? null,
+    nextMaxLingqi: upgradeTarget?.maxLingqi ?? null,
+    upgradeCostLingshi: upgradeTarget?.upgradeCostLingshi ?? null,
+    upgradeTreasureId: upgradeTarget?.upgradeTreasureId ?? null,
+    upgradeTreasureName: upgradeTarget?.upgradeTreasureId
+      ? (getItemDefinition(upgradeTarget.upgradeTreasureId)?.name ?? null)
+      : null,
+    upgradeTreasureCount: upgradeTarget?.upgradeTreasureId && inventory
+      ? getItemCount(inventory, upgradeTarget.upgradeTreasureId)
+      : 0,
+    upgradeTreasureMinDropRealm: getDongfuTreasureMinDropRealm(dongfu.level),
   }
 }

@@ -23,6 +23,7 @@ const summary = computed(() => {
 
 const ageText = computed(() => `${playerStore.player.age} 岁`)
 const dateText = computed(() => playerStore.gameDateText)
+const lingshiText = computed(() => String(playerStore.inventory.lingshi))
 </script>
 
 <template>
@@ -30,6 +31,10 @@ const dateText = computed(() => playerStore.gameDateText)
     <div class="game-status-bar__player">
       <div class="game-status-bar__identity">
         <span class="game-status-bar__name">{{ summary.name }}</span>
+        <span
+          v-if="playerStore.equippedTitleText"
+          class="game-status-bar__title"
+        >{{ playerStore.equippedTitleText }}</span>
         <span class="game-status-bar__realm">{{ summary.realm }}</span>
       </div>
       <div class="game-status-bar__xiuwei-row">
@@ -54,6 +59,10 @@ const dateText = computed(() => playerStore.gameDateText)
       <div class="game-status-bar__meta-item">
         <span class="game-status-bar__meta-label">时日</span>
         <span class="game-status-bar__meta-value game-status-bar__meta-value--date">{{ dateText }}</span>
+      </div>
+      <div class="game-status-bar__meta-item">
+        <span class="game-status-bar__meta-label">灵石</span>
+        <span class="game-status-bar__meta-value">{{ lingshiText }}</span>
       </div>
     </div>
   </header>
@@ -101,6 +110,14 @@ const dateText = computed(() => playerStore.gameDateText)
   white-space: nowrap;
 }
 
+.game-status-bar__title {
+  font-size: 11px;
+  color: $color-info;
+  white-space: nowrap;
+}
+
+.game-status-bar__name + .game-status-bar__title,
+.game-status-bar__title + .game-status-bar__realm,
 .game-status-bar__name + .game-status-bar__realm {
   margin-left: 8px;
 }

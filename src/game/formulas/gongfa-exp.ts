@@ -22,10 +22,13 @@ export interface GongfaExpInput {
 }
 
 /**
- * 计算功法经验增量（文档 7.3）
- * 功法经验 = 怪物境界固定经验 × 灵根适配倍率 × 五行隐藏系数 × 怪物品阶系数
+ * 计算功法经验增量
+ * 基础经验 = 怪物境界固定经验 × 灵根适配倍率 × 五行隐藏系数 × 怪物品阶系数
+ * 功法经验 = 基础经验 × 功法经验获取倍率
+ * @param input 计算参数
+ * @returns 功法经验增量
  */
-export function calcGongfaExpGain(input: GongfaExpInput): number {
+export function calcGongfaExpGain(input: GongfaExpInput, gongfaExpMultiplier: number): number {
   const baseExp = MONSTER_REALM_GONGFA_EXP[getRealmMajor(input.monsterRealm)]
   const adaptMultiplier = getSpiritRootAdaptMultiplier(
     input.spiritRootType,
@@ -39,7 +42,7 @@ export function calcGongfaExpGain(input: GongfaExpInput): number {
   const tierMultiplier = getMonsterTierRewardMultiplier(input.monsterTier)
 
   const raw = baseExp * adaptMultiplier * hiddenMultiplier * tierMultiplier
-  const floored = Math.floor(raw)
+  const floored = Math.floor(raw * gongfaExpMultiplier)
   // 炼气期基础经验为 1，倍率相乘后常 < 1，直接取整会变成 0 导致无法升级
   if (floored > 0) return floored
   return raw > 0 ? 1 : 0

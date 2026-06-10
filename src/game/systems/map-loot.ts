@@ -6,6 +6,8 @@ import type { ElementType } from '@/game/types'
 export interface MapLootRollResult {
   /** 本次掉落的功法模板 id 列表 */
   gongfaIds: string[]
+  /** 本次掉落的物品（id + 数量） */
+  items: Array<{ itemId: string; count: number }>
 }
 
 /**
@@ -56,16 +58,23 @@ export function rollMapLoot(
   rateMultiplier = 1,
 ): MapLootRollResult {
   const gongfaIds: string[] = []
+  const items: Array<{ itemId: string; count: number }> = []
 
   for (const item of drops) {
-    if (item.type !== 'gongfa') continue
     const chance = Math.min(1, item.rate * rateMultiplier)
-    if (Math.random() < chance) {
+    if (Math.random() >= chance) continue
+
+    if (item.type === 'gongfa') {
       gongfaIds.push(item.gongfaId)
+      continue
+    }
+
+    if (item.type === 'item') {
+      items.push({ itemId: item.itemId, count: item.count ?? 1 })
     }
   }
 
-  return { gongfaIds }
+  return { gongfaIds, items }
 }
 
 /**

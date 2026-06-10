@@ -1,5 +1,7 @@
 # 修仙游戏属性系统文档 v1.0（连续版）
 
+> **莽荒大陆战斗数值**（妖兽为主、同级需高 3 / 5 级等）见 [balance-combat.md](./balance-combat.md)。代码锚点：`src/game/constants/combat-balance.ts`。
+
 ## 一、人物基础属性（修仙者自身成长）
 
 | 属性名称 | 说明 | 典型数值范围（初期） |

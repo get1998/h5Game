@@ -225,11 +225,39 @@ export function getAttackDamageWeight(skill: Skill, proficiency = 0): number {
 }
 
 /**
+ * 计算技能实际灵力消耗（支持 cost_mp_percent 按上限比例扣除）
+ */
+export function calcSkillCastMpCost(skill: Skill, maxMp: number): number {
+  const percent = skill.params.cost_mp_percent
+  if (typeof percent === 'number' && percent > 0) {
+    return Math.max(0, Math.floor(maxMp * percent))
+  }
+  return skill.costMp
+}
+
+/** 怪物技能释放上下文 */
+export interface MonsterSkillCastContext {
+  monsterMp: number
+  monsterMaxMp: number
+  skillCooldowns: Record<string, number>
+}
+
+/**
  * 判断技能当前是否可释放（灵力足够且不在冷却）
  */
 export function canCastSkill(skill: Skill, context: SkillCastContext): boolean {
   if (!isCastableSkill(skill)) return false
   if (context.playerMp < skill.costMp) return false
+  return (context.skillCooldowns[skill.id] ?? 0) <= 0
+}
+
+/**
+ * 判断怪物技能当前是否可释放
+ */
+export function canCastMonsterSkill(skill: Skill, context: MonsterSkillCastContext): boolean {
+  if (!isCastableSkill(skill)) return false
+  const cost = calcSkillCastMpCost(skill, context.monsterMaxMp)
+  if (context.monsterMp < cost) return false
   return (context.skillCooldowns[skill.id] ?? 0) <= 0
 }
 
@@ -257,6 +285,18 @@ export function selectBestAttackSkill(
   context: SkillCastContext,
 ): Skill | undefined {
   return getCastableAttackSkills(skills, context)[0]
+}
+
+/**
+ * 怪物自动选择伤害最高的可释放攻击技能
+ */
+export function selectBestMonsterAttackSkill(
+  skills: Skill[],
+  context: MonsterSkillCastContext,
+): Skill | undefined {
+  return skills
+    .filter((skill) => skill.category === 'attack' && canCastMonsterSkill(skill, context))
+    .sort((a, b) => getAttackDamageWeight(b, 0) - getAttackDamageWeight(a, 0))[0]
 }
 
 function mapSkillRow(row: SkillJsonRow): Skill {
@@ -296,6 +336,13 @@ for (const skill of SKILL_CATALOG) {
 
 for (const [, list] of skillsByGongfaId) {
   list.sort((a, b) => a.minLevel - b.minLevel || a.id.localeCompare(b.id))
+}
+
+/**
+ * 是否为功法永久被动技能
+ */
+export function isPermanentPassiveSkill(skill: Skill): boolean {
+  return skill.type === 'passive'
 }
 
 /**

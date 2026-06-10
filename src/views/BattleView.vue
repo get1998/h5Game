@@ -36,6 +36,8 @@ const battleInfo = computed(() => {
       monsterKind: '',
       monsterElement: '',
       tier: '',
+      status: '',
+      statusHint: '',
       monsterHp: 0,
       monsterMaxHp: 0,
       hpBarStyle: 'width: 0%',
@@ -49,6 +51,10 @@ const battleInfo = computed(() => {
     monsterKind: monster.kind,
     monsterElement: monster.element,
     tier: monster.tier,
+    status: monster.status,
+    statusHint: monster.status !== '普通'
+      ? `气血约 ${Math.round(monster.statusHpRatio * 100)}%`
+      : '',
     hpBarStyle: `width: ${percent}%`,
     monsterHp: monster.combat.hp,
     monsterMaxHp: monster.combat.maxHp,
@@ -57,9 +63,18 @@ const battleInfo = computed(() => {
 
 const currentMapName = computed(() => gameStore.currentMap?.name ?? '未选择')
 
+/** 玩家气血进度条宽度 */
+const playerEffectiveCombat = computed(() => playerStore.effectiveCombatStats.combat)
+
+const playerHpBarStyle = computed(() => {
+  const { hp, maxHp } = playerEffectiveCombat.value
+  const percent = maxHp > 0 ? Math.floor((hp / maxHp) * 100) : 0
+  return `width: ${percent}%`
+})
+
 /** 玩家灵力进度条宽度 */
 const playerMpBarStyle = computed(() => {
-  const { mp, maxMp } = playerStore.player.combat
+  const { mp, maxMp } = playerEffectiveCombat.value
   const percent = maxMp > 0 ? Math.floor((mp / maxMp) * 100) : 0
   return `width: ${percent}%`
 })
@@ -152,13 +167,16 @@ function handleToggleExplore() {
       <div class="stat-row">
         <span class="stat-label">气血</span>
         <span class="stat-value">
-          {{ playerStore.player.combat.hp }} / {{ playerStore.player.combat.maxHp }}
+          {{ playerEffectiveCombat.hp }} / {{ playerEffectiveCombat.maxHp }}
         </span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar__fill progress-bar__fill--hp" :style="playerHpBarStyle" />
       </div>
       <div class="stat-row">
         <span class="stat-label">灵力</span>
         <span class="stat-value">
-          {{ playerStore.player.combat.mp }} / {{ playerStore.player.combat.maxMp }}
+          {{ playerEffectiveCombat.mp }} / {{ playerEffectiveCombat.maxMp }}
         </span>
       </div>
       <div class="progress-bar">
@@ -174,6 +192,10 @@ function handleToggleExplore() {
         <div class="stat-row">
           <span class="stat-label">境界</span>
           <span class="stat-value">【{{ battleInfo.tier }}】{{ battleInfo.realm }}</span>
+        </div>
+        <div v-if="battleInfo.statusHint" class="stat-row">
+          <span class="stat-label">状态</span>
+          <span class="stat-value stat-value--bargain">{{ battleInfo.status }}（{{ battleInfo.statusHint }}）</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">五行</span>
@@ -292,6 +314,11 @@ function handleToggleExplore() {
   margin-bottom: 8px;
 }
 
+.stat-value--bargain {
+  color: $color-success;
+  font-weight: 600;
+}
+
 .battle-empty {
   color: $color-text-muted;
   font-size: 13px;
@@ -316,6 +343,10 @@ function handleToggleExplore() {
   background: $color-success;
   border-radius: 3px;
   transition: width 0.2s;
+}
+
+.progress-bar__fill--hp {
+  background: $color-success;
 }
 
 .progress-bar__fill--danger {

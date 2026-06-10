@@ -36,11 +36,24 @@ export function createBattleSkillState(player: { combat: { mp: number } }): Batt
 
 /**
  * 重置单场战斗技能状态（遇怪时调用，灵力回满）
+ * @param maxMp 有效灵力上限
  */
-export function resetBattleSkillState(player: { combat: { maxMp: number } }): BattleSkillState {
+export function resetBattleSkillState(maxMp: number): BattleSkillState {
   return {
-    playerMp: player.combat.maxMp,
+    playerMp: maxMp,
     skillCooldowns: {},
+  }
+}
+
+/**
+ * 递减技能冷却表
+ */
+export function tickSkillCooldowns(cooldowns: Record<string, number>): void {
+  for (const skillId of Object.keys(cooldowns)) {
+    const remaining = cooldowns[skillId] ?? 0
+    if (remaining > 0) {
+      cooldowns[skillId] = remaining - 1
+    }
   }
 }
 
@@ -48,12 +61,7 @@ export function resetBattleSkillState(player: { combat: { maxMp: number } }): Ba
  * 回合开始时递减全部技能冷却
  */
 export function tickBattleSkillCooldowns(state: BattleSkillState): void {
-  for (const skillId of Object.keys(state.skillCooldowns)) {
-    const remaining = state.skillCooldowns[skillId] ?? 0
-    if (remaining > 0) {
-      state.skillCooldowns[skillId] = remaining - 1
-    }
-  }
+  tickSkillCooldowns(state.skillCooldowns)
 }
 
 /**
@@ -129,12 +137,6 @@ export function executePlayerAttack(
     skillProficiency: gongfa.skillProficiency,
   })
 
-  const attackElement = resolvePlayerAttackElement(
-    selectedSkill ?? null,
-    gongfa,
-    snapshot,
-    monster.element,
-  )
   const defender = {
     defense: monster.combat.defense,
     speed: monster.combat.speed,
@@ -142,6 +144,12 @@ export function executePlayerAttack(
   }
 
   if (selectedSkill) {
+    const attackElement = resolvePlayerAttackElement(
+      selectedSkill,
+      gongfa,
+      snapshot,
+      monster.element,
+    )
     applySkillCast(skillState, selectedSkill)
     const hitCount = getSkillHitCount(selectedSkill)
     const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
@@ -188,19 +196,15 @@ export function executePlayerAttack(
     source: 'normal',
     attacker: buildPlayerAttacker(snapshot),
     defender,
-    attackElement,
   })
 
   if (result.hit) {
     monsterHp = Math.max(0, monsterHp - result.damage)
     logs.push(
       createLog(
-        appendElementHint(
-          result.isCrit
-            ? `你普通攻击暴击 ${result.damage} 点伤害！`
-            : `你普通攻击造成 ${result.damage} 点伤害。`,
-          result.elementHint,
-        ),
+        result.isCrit
+          ? `你普通攻击暴击 ${result.damage} 点伤害！`
+          : `你普通攻击造成 ${result.damage} 点伤害。`,
         result.isCrit ? 'crit' : 'damage',
       ),
     )
