@@ -22,13 +22,13 @@ export function addSkillProficiency(
 
   const map: SkillProficiencyMap = { ...gongfa.skillProficiency }
   const previousProficiency = map[skillId] ?? 0
-  const previousLevel = getSkillLevelFromProficiency(previousProficiency)
+    const previousLevel = getSkillLevelFromProficiency(previousProficiency, gongfa.quality)
 
-  const nextProficiency = previousProficiency + gain
-  map[skillId] = nextProficiency
-  gongfa.skillProficiency = map
+    const nextProficiency = previousProficiency + gain
+    map[skillId] = nextProficiency
+    gongfa.skillProficiency = map
 
-  const newLevel = getSkillLevelFromProficiency(nextProficiency)
+    const newLevel = getSkillLevelFromProficiency(nextProficiency, gongfa.quality)
   if (newLevel === previousLevel) return null
 
   return {
@@ -59,13 +59,14 @@ export function addSkillProficiencyBatch(
 
     const map: SkillProficiencyMap = { ...gongfa.skillProficiency }
     const previousProficiency = map[skillId] ?? 0
-    const previousLevel = levelUps.get(skillId) ?? getSkillLevelFromProficiency(previousProficiency)
+    const previousLevel = levelUps.get(skillId)
+      ?? getSkillLevelFromProficiency(previousProficiency, gongfa.quality)
 
     const nextProficiency = previousProficiency + amount
     map[skillId] = nextProficiency
     gongfa.skillProficiency = map
 
-    const newLevel = getSkillLevelFromProficiency(nextProficiency)
+    const newLevel = getSkillLevelFromProficiency(nextProficiency, gongfa.quality)
     if (newLevel !== previousLevel) {
       levelUps.set(skillId, newLevel)
       results.push({

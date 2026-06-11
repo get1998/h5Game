@@ -111,7 +111,7 @@ export interface BattleRoundResult {
   gongfaExpGain: number
   /** 击杀获得的修为（精英及以上同级为主；高境界差时普通亦可获得） */
   xiuweiGain: number
-  /** 本回合技能熟练度增量（施展技能且怪物境界不低于玩家时才有） */
+  /** 本回合技能熟练度增量（施展主动 / 绝技后结算，至少 +1） */
   skillProficiencyGains: BattleSkillProficiencyGain[]
 }
 
@@ -216,9 +216,11 @@ export function runBattleRound(
     gongfa,
     skillState,
     createLog,
+    { hp: playerHp, maxHp: player.combat.maxHp },
   )
   logs.push(...playerAttack.logs)
   monsterHp = playerAttack.monsterHp
+  playerHp = playerAttack.playerHp
 
   const skillProficiencyGains: BattleSkillProficiencyGain[] = []
   if (playerAttack.castSkillId) {

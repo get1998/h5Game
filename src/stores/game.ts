@@ -23,6 +23,7 @@ import {
   SEVERE_INJURY_LIFESPAN_PENALTY_YEARS,
   shouldApplyRestLifespanPenalty,
   type BattleMonsterSkillState,
+  type BattleRoundResult,
   type BattleSkillState,
   type PlayerBattleDebuffs,
   type RecoveryPhase,
@@ -45,6 +46,7 @@ import {
 import { calcBattleLingshiReward } from '@/game/formulas/battle-lingshi'
 import { getItemDefinition } from '@/game/constants/items'
 import { rollDongfuTreasureDrop } from '@/game/systems/dongfu-treasure-loot'
+import type { Gongfa } from '@/game/models/gongfa'
 import { usePlayerStore } from '@/stores/player'
 import { useDongfuStore } from '@/stores/dongfu'
 
@@ -557,6 +559,94 @@ export const useGameStore = defineStore('game', {
       }, map.encounterDelayMs)
     },
 
+    /**
+     * 战斗胜利后结算奖励（先于战斗日志写入，保证角色修为与日志同步刷新）
+     */
+    applyBattleVictoryRewards(result: BattleRoundResult, gongfa: Gongfa): string[] {
+      const playerStore = usePlayerStore()
+      const messages: string[] = []
+
+      const achievementUnlocks = playerStore.recordBattleWin()
+      for (const unlock of achievementUnlocks) {
+        const titleHint = unlock.rewardTitleId ? '，获得新称号' : ''
+        this.pushSystemLog(`成就解锁：「${unlock.name}」${titleHint}`)
+      }
+
+      if (result.xiuweiGain > 0) {
+        const applied = playerStore.addXiuwei(result.xiuweiGain)
+        if (applied > 0) {
+          const text = `获得修为 ${applied} 点（${playerStore.xiuweiSummary.text}）`
+          messages.push(text)
+        }
+        const autoResult = this.tryAutoMinorBreakthrough()
+        if (autoResult.attempted) {
+          messages.push(autoResult.message)
+        }
+      }
+
+      if (result.gongfaExpGain > 0) {
+        const levelResult = playerStore.gainGongfaExp(gongfa.id, result.gongfaExpGain)
+        if (levelResult) {
+          const expText = `${levelResult.message}（+${result.gongfaExpGain} 功法经验）`
+          messages.push(expText)
+          this.pushSystemLog(expText)
+        }
+      }
+
+      if (this.currentMonster) {
+        const lingshiGain = calcBattleLingshiReward(
+          this.currentMonster.realm,
+          playerStore.player.realm,
+          this.currentMonster.tier,
+        )
+        if (lingshiGain > 0) {
+          playerStore.gainLingshi(lingshiGain)
+          const text = `获得灵石 ${lingshiGain} 枚`
+          messages.push(text)
+          this.pushSystemLog(text)
+        }
+      }
+
+      const map = this.currentMap
+      if (map) {
+        const lootMultiplier = getTierLootMultiplier(this.currentMonster!.tier)
+        const loot = rollMapLoot(map.drops, lootMultiplier)
+        for (const gongfaId of loot.gongfaIds) {
+          const obtain = playerStore.tryObtainGongfa(gongfaId)
+          if (obtain.obtained) {
+            const text = `获得功法「${obtain.gongfaName}」！`
+            messages.push(text)
+            this.pushSystemLog(text)
+          } else if (obtain.duplicate) {
+            const text = `已领悟「${obtain.gongfaName}」，并无新收获。`
+            this.pushSystemLog(text)
+          }
+        }
+        for (const drop of loot.items) {
+          const gain = playerStore.gainItem(drop.itemId, drop.count)
+          if (gain.added > 0) {
+            const name = getItemDefinition(drop.itemId)?.name ?? '未知物品'
+            const text = `获得「${name}」×${gain.added}`
+            messages.push(text)
+            this.pushSystemLog(text)
+          }
+        }
+      }
+
+      const dongfuLevel = useDongfuStore().dongfu.level
+      const treasureDrop = rollDongfuTreasureDrop(this.currentMonster!, dongfuLevel)
+      if (treasureDrop) {
+        const gain = playerStore.gainItem(treasureDrop.itemId, 1)
+        if (gain.added > 0) {
+          const text = `获得洞府宝物「${treasureDrop.itemName}」！`
+          messages.push(text)
+          this.pushSystemLog(text)
+        }
+      }
+
+      return messages
+    },
+
     /** 执行一轮战斗 */
     runBattleRoundAction() {
       if (this.isRecoveryLocked || this.isCultivationLocked) return
@@ -584,7 +674,6 @@ export const useGameStore = defineStore('game', {
         },
       )
 
-      this.battleLogs.push(...result.logs)
       playerStore.setHp(result.playerHp)
       playerStore.setMp(result.playerMp)
       this.currentMonster.combat.hp = result.monsterHp
@@ -599,90 +688,25 @@ export const useGameStore = defineStore('game', {
         }
       }
 
+      let victoryMessages: string[] = []
+
       if (result.isFinished) {
         this.isBattling = false
         this.clearBattleTimers()
 
         if (result.playerWin) {
           this.consecutiveDefeatCount = 0
-          const messages: string[] = []
-
-          const achievementUnlocks = playerStore.recordBattleWin()
-          for (const unlock of achievementUnlocks) {
-            const titleHint = unlock.rewardTitleId ? '，获得新称号' : ''
-            this.pushSystemLog(`成就解锁：「${unlock.name}」${titleHint}`)
-          }
-
-          if (result.gongfaExpGain > 0) {
-            const levelResult = playerStore.gainGongfaExp(gongfa.id, result.gongfaExpGain)
-            if (levelResult) {
-              const expText = `${levelResult.message}（+${result.gongfaExpGain} 功法经验）`
-              messages.push(expText)
-              this.pushSystemLog(expText)
-            }
-          }
-
-          if (result.xiuweiGain > 0) {
-            playerStore.addXiuwei(result.xiuweiGain)
-            this.tryAutoMinorBreakthrough()
-          }
-
-          if (this.currentMonster) {
-            const lingshiGain = calcBattleLingshiReward(
-              this.currentMonster.realm,
-              playerStore.player.realm,
-              this.currentMonster.tier,
-            )
-            if (lingshiGain > 0) {
-              playerStore.gainLingshi(lingshiGain)
-              const text = `获得灵石 ${lingshiGain} 枚`
-              messages.push(text)
-              this.pushSystemLog(text)
-            }
-          }
-
-          const map = this.currentMap
-          if (map) {
-            const lootMultiplier = getTierLootMultiplier(this.currentMonster!.tier)
-            const loot = rollMapLoot(map.drops, lootMultiplier)
-            for (const gongfaId of loot.gongfaIds) {
-              const obtain = playerStore.tryObtainGongfa(gongfaId)
-              if (obtain.obtained) {
-                const text = `获得功法「${obtain.gongfaName}」！`
-                messages.push(text)
-                this.pushSystemLog(text)
-              } else if (obtain.duplicate) {
-                const text = `已领悟「${obtain.gongfaName}」，并无新收获。`
-                this.pushSystemLog(text)
-              }
-            }
-            for (const drop of loot.items) {
-              const gain = playerStore.gainItem(drop.itemId, drop.count)
-              if (gain.added > 0) {
-                const name = getItemDefinition(drop.itemId)?.name ?? '未知物品'
-                const text = `获得「${name}」×${gain.added}`
-                messages.push(text)
-                this.pushSystemLog(text)
-              }
-            }
-          }
-
-          const dongfuLevel = useDongfuStore().dongfu.level
-          const treasureDrop = rollDongfuTreasureDrop(this.currentMonster!, dongfuLevel)
-          if (treasureDrop) {
-            const gain = playerStore.gainItem(treasureDrop.itemId, 1)
-            if (gain.added > 0) {
-              const text = `获得洞府宝物「${treasureDrop.itemName}」！`
-              messages.push(text)
-              this.pushSystemLog(text)
-            }
-          }
-
-          if (messages.length > 0) {
-            this.lastMessage = messages.join(' ')
-          }
+          victoryMessages = this.applyBattleVictoryRewards(result, gongfa)
         }
+      }
 
+      // 奖励入账后再写入战斗日志，避免日志已显示修为但角色信息尚未刷新
+      if (victoryMessages.length > 0) {
+        this.lastMessage = victoryMessages.join(' ')
+      }
+      this.battleLogs.push(...result.logs)
+
+      if (result.isFinished) {
         if (result.playerWin && this.isAutoExploring) {
           this.scheduleNextEncounter()
         } else if (!result.playerWin) {

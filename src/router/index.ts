@@ -79,9 +79,8 @@ router.beforeEach((to) => {
   return true
 })
 
-router.afterEach((to) => {
-  const title = (to.meta.title as string) || '修仙挂机'
-  document.title = `${title} · 修仙挂机`
+router.afterEach(() => {
+  // document.title = `${(to.meta.title as string) || '修仙挂机'} · 修仙挂机`
 })
 
 export default router

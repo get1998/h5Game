@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import GameLayout from '@/components/layout/GameLayout.vue'
-import { REALM_BREAKTHROUGH_XIUWEI } from '@/game/constants/realm'
 import { calcBreakthroughSuccessRate } from '@/game/formulas/breakthrough-success'
 import { usePlayerStore } from '@/stores/player'
 import { useGameStore } from '@/stores/game'
 
 const playerStore = usePlayerStore()
 const gameStore = useGameStore()
+const { xiuweiSummary } = storeToRefs(playerStore)
 
 const breakthroughRate = computed(() =>
   calcBreakthroughSuccessRate(
@@ -18,10 +19,7 @@ const breakthroughRate = computed(() =>
 )
 
 const cultivationInfo = computed(() => {
-  const realm = playerStore.player.realm
-  const required = REALM_BREAKTHROUGH_XIUWEI[realm]
-  const current = playerStore.player.xiuwei
-  const percent = required > 0 ? Math.min(100, Math.floor((current / required) * 100)) : 0
+  const { realm, current, required, percent, progressBarStyle } = xiuweiSummary.value
   const rate = breakthroughRate.value
 
   const bonusParts: string[] = []
@@ -40,7 +38,7 @@ const cultivationInfo = computed(() => {
     current,
     required,
     percent,
-    progressBarStyle: `width: ${percent}%`,
+    progressBarStyle,
     canBreakthrough: current >= required && rate.nextRealm != null,
     successRateText: rate.nextRealm ? `${rate.percent}%` : '—',
     breakthroughTypeText: rate.nextRealm

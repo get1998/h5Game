@@ -3,6 +3,7 @@ import router from '@/router'
 import {
   getRealmXiuweiRoom,
   isRealmXiuweiFull,
+  REALM_BREAKTHROUGH_XIUWEI,
 } from '@/game/constants/realm'
 import { applyRealmBaseToPlayer, createDefaultPlayer, type Player } from '@/game/models/player'
 import {
@@ -151,6 +152,22 @@ export const usePlayerStore = defineStore('player', {
     /** 当前佩戴称号名称 */
     equippedTitleText(state): string | null {
       return getEquippedTitleName(state.titles)
+    },
+    /** 当前境界修为进度（角色信息 / 状态栏共用） */
+    xiuweiSummary(state) {
+      const realm = state.player.realm
+      const required = REALM_BREAKTHROUGH_XIUWEI[realm]
+      const current = state.player.xiuwei
+      const percent = required > 0 ? Math.min(100, Math.floor((current / required) * 100)) : 0
+
+      return {
+        realm,
+        current,
+        required,
+        percent,
+        text: `${current} / ${required}`,
+        progressBarStyle: `width: ${percent}%`,
+      }
     },
     /** 有效战斗属性（境界 + 功法 + 被动 + 称号 + 轮回） */
     effectiveCombatStats(state) {
@@ -396,15 +413,23 @@ export const usePlayerStore = defineStore('player', {
       this.worldTime.lastRealTickAt += days * REAL_MS_PER_GAME_DAY
       this.advanceWorldTimeByDays(days)
     },
-    /** 增加修为（不超过当前境界突破余量） */
-    addXiuwei(amount: number) {
-      if (amount <= 0 || isRealmXiuweiFull(this.player)) return
+    /**
+     * 增加修为（不超过当前境界突破余量）
+     * @returns 实际增加的修为点数
+     */
+    addXiuwei(amount: number): number {
+      if (amount <= 0 || isRealmXiuweiFull(this.player)) return 0
 
       const room = getRealmXiuweiRoom(this.player)
-      if (room <= 0) return
+      if (room <= 0) return 0
 
-      this.player.xiuwei += Math.min(amount, room)
+      const applied = Math.min(amount, room)
+      this.player = {
+        ...this.player,
+        xiuwei: this.player.xiuwei + applied,
+      }
       this.save()
+      return applied
     },
     /** 突破境界 */
     breakthrough(newRealm: Player['realm']): AchievementUnlockResult[] {
@@ -493,8 +518,12 @@ export const usePlayerStore = defineStore('player', {
 
       const gongfa = this.gongfaList[index]
       const results = addSkillProficiencyBatch(gongfa, gains)
-      if (results.length > 0 || gains.some((item) => item.amount > 0)) {
-        this.gongfaList[index] = { ...gongfa }
+      const hasGain = gains.some((item) => item.amount > 0)
+      if (hasGain || results.length > 0) {
+        this.gongfaList[index] = {
+          ...gongfa,
+          skillProficiency: { ...gongfa.skillProficiency },
+        }
         this.save()
       }
       return results

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import GameLayout from '@/components/layout/GameLayout.vue'
 import {
   calcSkillProficiencyProgress,
@@ -12,6 +13,7 @@ import {
 } from '@/game/models/skill'
 import { useGameStore } from '@/stores/game'
 import { usePlayerStore } from '@/stores/player'
+import type { GongfaQuality } from '@/game/types'
 
 const SKILL_TYPE_LABEL: Record<string, string> = {
   active: '主动',
@@ -21,20 +23,20 @@ const SKILL_TYPE_LABEL: Record<string, string> = {
 
 const playerStore = usePlayerStore()
 const gameStore = useGameStore()
+const { gongfaList } = storeToRefs(playerStore)
 
 /** 功法技能区折叠状态，默认展开 */
 const skillsExpandedMap = ref<Record<string, boolean>>({})
 const passiveExpandedMap = ref<Record<string, boolean>>({})
 
 function mapSkillItem(
-  gongfa: { level: number; skillProficiency: Record<string, number> },
+  gongfa: { level: number; quality: GongfaQuality; skillProficiency: Record<string, number> },
   skill: ReturnType<typeof getSkillsByGongfaId>[number],
 ) {
   const isUnlocked = gongfa.level >= skill.minLevel
   const isPassive = isPermanentPassiveSkill(skill)
   const proficiency = getSkillProficiency(gongfa.skillProficiency, skill.id)
-  const progress = calcSkillProficiencyProgress(proficiency)
-
+  const progress = calcSkillProficiencyProgress(proficiency, gongfa.quality)
   return {
     id: skill.id,
     name: skill.name,
@@ -57,7 +59,7 @@ function mapSkillItem(
 }
 
 const gongfaItems = computed(() =>
-  playerStore.gongfaList.map((gongfa) => {
+  gongfaList.value.map((gongfa) => {
     const allSkills = getSkillsByGongfaId(gongfa.id)
     const castSkills = allSkills
       .filter((skill) => isCastableSkill(skill))
@@ -218,6 +220,7 @@ function togglePassiveSkills(gongfaId: string) {
               <p class="gongfa-skill__unlock">{{ skill.unlockText }}</p>
               <p class="gongfa-skill__effect">{{ skill.effect }}</p>
               <template v-if="skill.isUnlocked">
+                <p v-if="skill.levelText" class="gongfa-skill__level">{{ skill.levelText }}</p>
                 <div class="progress-bar progress-bar--skill">
                   <div class="progress-bar__fill progress-bar__fill--skill" :style="skill.proficiencyBarStyle" />
                 </div>
@@ -424,6 +427,13 @@ function togglePassiveSkills(gongfaId: string) {
 
 .progress-bar__fill--skill {
   background: #9b7fd4;
+}
+
+.gongfa-skill__level {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: $color-primary;
 }
 
 .gongfa-skill__proficiency {

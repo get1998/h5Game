@@ -1,25 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { REALM_BREAKTHROUGH_XIUWEI } from '@/game/constants/realm'
+import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '@/stores/player'
 
 const playerStore = usePlayerStore()
+const { xiuweiSummary } = storeToRefs(playerStore)
 
-const summary = computed(() => {
-  const realm = playerStore.player.realm
-  const required = REALM_BREAKTHROUGH_XIUWEI[realm]
-  const current = playerStore.player.xiuwei
-  const percent = required > 0 ? Math.min(100, Math.floor((current / required) * 100)) : 0
-
-  return {
-    name: playerStore.player.name,
-    realm,
-    current,
-    required,
-    percent,
-    progressBarStyle: `width: ${percent}%`,
-  }
-})
+const summary = computed(() => ({
+  name: playerStore.player.name,
+  realm: xiuweiSummary.value.realm,
+  current: xiuweiSummary.value.current,
+  required: xiuweiSummary.value.required,
+  progressBarStyle: xiuweiSummary.value.progressBarStyle,
+}))
 
 const ageText = computed(() => `${playerStore.player.age} 岁`)
 const dateText = computed(() => playerStore.gameDateText)

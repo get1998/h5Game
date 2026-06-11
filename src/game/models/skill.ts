@@ -9,7 +9,7 @@ import {
   getSkillLevelCoefficient,
   getSkillLevelFromProficiency,
   getSkillProficiencyCoefficient,
-  SKILL_PROFICIENCY_THRESHOLDS,
+  getSkillProficiencyThreshold,
   type SkillLevel,
 } from '@/game/constants/skill-level'
 import {
@@ -20,7 +20,7 @@ import {
   type SkillParams,
   validateSkillCatalog,
 } from '@/game/constants/skill-params'
-import type { ElementType } from '@/game/types'
+import type { ElementType, GongfaQuality } from '@/game/types'
 
 export type { SkillLevel } from '@/game/constants/skill-level'
 export {
@@ -28,9 +28,13 @@ export {
   getSkillLevelCoefficient,
   getSkillLevelFromProficiency,
   getSkillProficiencyCoefficient,
+  getSkillProficiencyThreshold,
   SKILL_LEVEL_COEFFICIENT,
   SKILL_LEVEL_ORDER,
+  getSkillProficiencyRealmMultiplierByDiff,
   SKILL_PROFICIENCY_BASE_GAIN,
+  SKILL_PROFICIENCY_MIN_GAIN,
+  SKILL_PROFICIENCY_REALM_MULTIPLIER_BY_DIFF,
   SKILL_PROFICIENCY_THRESHOLDS,
 } from '@/game/constants/skill-level'
 export {
@@ -420,12 +424,13 @@ export interface SkillProficiencyProgress {
 
 /**
  * 计算技能熟练度进度（当前等级段内的百分比与展示文案）
+ * @param proficiency - 技能熟练度
+ * @param quality - 功法品质
  */
-export function calcSkillProficiencyProgress(proficiency: number): SkillProficiencyProgress {
-  const level = getSkillLevelFromProficiency(proficiency)
-  const currentThreshold = SKILL_PROFICIENCY_THRESHOLDS[level]
-  const nextThreshold = getNextSkillLevelThreshold(level)
-
+export function calcSkillProficiencyProgress(proficiency: number, quality: GongfaQuality): SkillProficiencyProgress {
+  const level = getSkillLevelFromProficiency(proficiency, quality)
+  const currentThreshold = getSkillProficiencyThreshold(level, quality)
+  const nextThreshold = getNextSkillLevelThreshold(level, quality)
   if (!nextThreshold) {
     return {
       level,

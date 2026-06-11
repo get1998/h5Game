@@ -3,6 +3,7 @@ import { appendElementHint, resolveAttack } from '@/game/systems/combat-resolve'
 import type { Gongfa } from '@/game/models/gongfa'
 import type { Monster } from '@/game/models/monster'
 import {
+  canCastSkill,
   getScaledSkillParams,
   getSkillDamageMultiplier,
   getSkillHitCount,
@@ -11,6 +12,8 @@ import {
   resolveSkillAttackElement,
   selectBestAttackSkill,
   type Skill,
+  type SkillCastContext,
+  type SkillCategory,
 } from '@/game/models/skill'
 import type { BattleLogEntry, ElementType } from '@/game/types'
 
@@ -115,8 +118,71 @@ function buildPlayerAttacker(snapshot: CombatSnapshot, penetration = snapshot.pe
   }
 }
 
+/** 玩家当前气血（回合内可变） */
+export interface PlayerCombatHp {
+  hp: number
+  maxHp: number
+}
+
+function getCastableSkillsByCategory(
+  skills: Skill[],
+  category: SkillCategory,
+  context: SkillCastContext,
+): Skill[] {
+  return skills.filter((skill) => skill.category === category && canCastSkill(skill, context))
+}
+
 /**
- * 玩家回合：自动选择伤害最高的可释放攻击技能，否则普通攻击
+ * 自动选择本回合释放的主动 / 绝技
+ * 优先：低血量回复 → 攻击 → 增益 / 防御
+ */
+export function selectPlayerCastSkill(
+  skills: Skill[],
+  context: SkillCastContext,
+  playerHpRatio: number,
+): Skill | undefined {
+  if (playerHpRatio < 0.55) {
+    const healSkills = getCastableSkillsByCategory(skills, 'heal', context)
+      .sort((a, b) => {
+        const profA = getSkillProficiency(context.skillProficiency, a.id)
+        const profB = getSkillProficiency(context.skillProficiency, b.id)
+        const healA = Number(getScaledSkillParams(a.params, profA).hp_regen_percent) || 0
+        const healB = Number(getScaledSkillParams(b.params, profB).hp_regen_percent) || 0
+        return healB - healA
+      })
+    if (healSkills[0]) return healSkills[0]
+  }
+
+  const attackSkill = selectBestAttackSkill(skills, context)
+  if (attackSkill) return attackSkill
+
+  const supportSkills = [
+    ...getCastableSkillsByCategory(skills, 'buff', context),
+    ...getCastableSkillsByCategory(skills, 'defense', context),
+  ]
+  if (supportSkills.length > 0) {
+    return supportSkills[0]
+  }
+
+  return undefined
+}
+
+function applySelfHealFromSkill(
+  skill: Skill,
+  proficiency: number,
+  playerHp: PlayerCombatHp,
+): number {
+  const params = getScaledSkillParams(skill.params, proficiency)
+  const regenPercent = params.hp_regen_percent
+  if (typeof regenPercent !== 'number' || regenPercent <= 0) return 0
+
+  const heal = Math.max(1, Math.floor(playerHp.maxHp * regenPercent))
+  playerHp.hp = Math.min(playerHp.maxHp, playerHp.hp + heal)
+  return heal
+}
+
+/**
+ * 玩家回合：自动选择可释放主动技能（攻击 / 回复 / 增益），否则普通攻击
  */
 export function executePlayerAttack(
   snapshot: CombatSnapshot,
@@ -124,18 +190,23 @@ export function executePlayerAttack(
   gongfa: Gongfa,
   skillState: BattleSkillState,
   createLog: LogFactory,
-): { logs: BattleLogEntry[]; monsterHp: number; castSkillId: string | null } {
+  playerHpState: PlayerCombatHp,
+): { logs: BattleLogEntry[]; monsterHp: number; playerHp: number; castSkillId: string | null } {
   const logs: BattleLogEntry[] = []
   let monsterHp = monster.combat.hp
 
   tickBattleSkillCooldowns(skillState)
 
   const unlockedSkills = getUnlockedSkills(gongfa.id, gongfa.level)
-  const selectedSkill = selectBestAttackSkill(unlockedSkills, {
+  const castContext: SkillCastContext = {
     playerMp: skillState.playerMp,
     skillCooldowns: skillState.skillCooldowns,
     skillProficiency: gongfa.skillProficiency,
-  })
+  }
+  const hpRatio = playerHpState.maxHp > 0
+    ? playerHpState.hp / playerHpState.maxHp
+    : 1
+  const selectedSkill = selectPlayerCastSkill(unlockedSkills, castContext, hpRatio)
 
   const defender = {
     defense: monster.combat.defense,
@@ -144,19 +215,47 @@ export function executePlayerAttack(
   }
 
   if (selectedSkill) {
+    const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
+    applySkillCast(skillState, selectedSkill)
+    logs.push(createLog(`你施展「${selectedSkill.name}」！`, 'info'))
+
+    if (selectedSkill.category === 'heal' || selectedSkill.category === 'buff') {
+      const heal = applySelfHealFromSkill(selectedSkill, proficiency, playerHpState)
+      if (heal > 0) {
+        logs.push(createLog(`「${selectedSkill.name}」恢复 ${heal} 点气血。`, 'heal'))
+      }
+      return {
+        logs,
+        monsterHp,
+        playerHp: playerHpState.hp,
+        castSkillId: selectedSkill.id,
+      }
+    }
+
+    if (selectedSkill.category === 'defense') {
+      const heal = applySelfHealFromSkill(selectedSkill, proficiency, playerHpState)
+      if (heal > 0) {
+        logs.push(createLog(`「${selectedSkill.name}」恢复 ${heal} 点气血。`, 'heal'))
+      } else {
+        logs.push(createLog(`「${selectedSkill.name}」生效。`, 'info'))
+      }
+      return {
+        logs,
+        monsterHp,
+        playerHp: playerHpState.hp,
+        castSkillId: selectedSkill.id,
+      }
+    }
+
     const attackElement = resolvePlayerAttackElement(
       selectedSkill,
       gongfa,
       snapshot,
       monster.element,
     )
-    applySkillCast(skillState, selectedSkill)
     const hitCount = getSkillHitCount(selectedSkill)
-    const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
     const skillMultiplier = getSkillDamageMultiplier(selectedSkill, proficiency)
     const penetration = getSkillExtraPenetration(selectedSkill, snapshot.penetration, proficiency)
-
-    logs.push(createLog(`你施展「${selectedSkill.name}」！`, 'info'))
 
     for (let i = 0; i < hitCount; i += 1) {
       if (monsterHp <= 0) break
@@ -189,7 +288,12 @@ export function executePlayerAttack(
         )
       }
     }
-    return { logs, monsterHp, castSkillId: selectedSkill.id }
+    return {
+      logs,
+      monsterHp,
+      playerHp: playerHpState.hp,
+      castSkillId: selectedSkill.id,
+    }
   }
 
   const result = resolveAttack({
@@ -212,5 +316,10 @@ export function executePlayerAttack(
     logs.push(createLog(`${monster.name} 闪避了你的攻击。`, 'miss'))
   }
 
-  return { logs, monsterHp, castSkillId: null }
+  return {
+    logs,
+    monsterHp,
+    playerHp: playerHpState.hp,
+    castSkillId: null,
+  }
 }

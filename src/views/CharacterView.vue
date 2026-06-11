@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import GameLayout from '@/components/layout/GameLayout.vue'
 import { usePlayerStore } from '@/stores/player'
@@ -8,6 +9,7 @@ import { useGameStore } from '@/stores/game'
 const router = useRouter()
 const playerStore = usePlayerStore()
 const gameStore = useGameStore()
+const { xiuweiSummary } = storeToRefs(playerStore)
 
 const characterStats = computed(() => {
   const p = playerStore.player
@@ -18,7 +20,7 @@ const characterStats = computed(() => {
     { label: '称号', value: playerStore.equippedTitleText || '未佩戴' },
     { label: '年龄', value: `${p.age} 岁` },
     { label: '寿元', value: `${p.lifespan} 年` },
-    { label: '修为', value: String(p.xiuwei) },
+    { label: '修为', value: xiuweiSummary.value.text },
     { label: '神识', value: String(p.shenshi) },
     { label: '肉身强度', value: String(p.bodyStrength) },
     { label: '灵根', value: playerStore.spiritRootText },
