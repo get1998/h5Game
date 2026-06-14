@@ -7,7 +7,7 @@ import { formatDongfuTreasureDropHint } from '@/game/systems/dongfu-treasure-loo
 import { getItemDefinition } from '@/game/constants/items'
 import type { Dongfu } from '@/game/models/dongfu'
 import type { InventoryState } from '@/game/models/item'
-import { getItemCount, removeItemFromInventory, spendLingshi } from '@/game/systems/inventory'
+import { getItemCount, removeItemFromInventory, spendLingshi, getTotalLingshi } from '@/game/systems/inventory'
 
 export interface DongfuUpgradeCheck {
   canUpgrade: boolean
@@ -34,7 +34,7 @@ export function checkDongfuUpgrade(
   }
 
   const cost = target.upgradeCostLingshi ?? 0
-  if (inventory.lingshi < cost) {
+  if (getTotalLingshi(inventory.lingshi) < cost) {
     return {
       canUpgrade: false,
       reason: `灵石不足（需 ${cost}）`,
@@ -71,7 +71,7 @@ export function upgradeDongfu(
 
   const target = check.target
   const cost = target.upgradeCostLingshi ?? 0
-  if (!spendLingshi(inventory, cost)) {
+  if (!spendLingshi(inventory, cost).success) {
     return { success: false, message: '灵石不足' }
   }
 

@@ -2,6 +2,7 @@
 export { isPermanentPassiveSkill } from '@/game/models/skill'
 export {
   aggregatePermanentPassiveContributions,
+  aggregateSkillMasteryPassiveContributions,
   extractPassiveSkillContribution,
   getUnlockedPassiveSkills,
 } from '@/game/systems/stat-contributors/passive-contributor'

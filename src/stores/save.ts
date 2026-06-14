@@ -29,6 +29,19 @@ import {
   type InventoryState,
 } from '@/game/models/item'
 import { createDefaultMarketState, normalizeMarketState, type MarketState } from '@/game/models/market'
+import {
+  type PlayerSkillState,
+} from '@/game/models/player-skill'
+import {
+  createDefaultFabaoState,
+  normalizeFabaoState,
+  type FabaoState,
+} from '@/game/models/fabao'
+import {
+  migratePlayerSkillStateFromGongfaList,
+  normalizePlayerSkillState,
+  syncLearnedSkillsFromGongfaList,
+} from '@/game/systems/player-skill-library'
 import { createInitialWorldTime, type WorldTime } from '@/game/systems/time'
 import type { IdleState } from '@/game/types'
 
@@ -54,15 +67,21 @@ export interface GameSaveData {
   inventory: InventoryState
   /** 坊市稀世寄售 */
   market: MarketState
+  /** 玩家技能库（领悟与战斗装配，不随切换功法丢失） */
+  playerSkills: PlayerSkillState
+  /** 法器系统 */
+  fabao: FabaoState
 }
 
 /** 创建默认闭关状态 */
 export function createDefaultIdleState(): IdleState {
   return {
     isRunning: false,
+    mode: 'xiuwei',
     lastTickAt: Date.now(),
     accumulatedSeconds: 0,
     xiuweiRemainder: 0,
+    gongfaExpRemainder: 0,
   }
 }
 
@@ -85,10 +104,11 @@ export function createDefaultGameSave(): GameSaveData {
   const starter = createStarterGongfa()
   const player = createDefaultPlayer()
   applyRealmBaseToPlayer(player, player.realm, starter)
+  const gongfaList = [starter]
   return {
     player,
     activeGongfaId: starter.id,
-    gongfaList: [starter],
+    gongfaList,
     worldTime: createInitialWorldTime(),
     dongfu: createDefaultDongfu(),
     idle: createDefaultIdleState(),
@@ -98,6 +118,8 @@ export function createDefaultGameSave(): GameSaveData {
     titles: createDefaultTitleState(),
     inventory: createDefaultInventory(),
     market: createDefaultMarketState(),
+    playerSkills: migratePlayerSkillStateFromGongfaList(gongfaList),
+    fabao: createDefaultFabaoState(),
   }
 }
 
@@ -133,6 +155,20 @@ function normalizePlayer(player: Player): Player {
   return normalized
 }
 
+/** 规范化玩家技能库（旧存档从功法列表迁移） */
+function normalizePlayerSkills(
+  playerSkills: PlayerSkillState | undefined,
+  gongfaList: Gongfa[],
+): PlayerSkillState {
+  if (!playerSkills || Object.keys(playerSkills.learned ?? {}).length === 0) {
+    return migratePlayerSkillStateFromGongfaList(gongfaList)
+  }
+
+  const normalized = normalizePlayerSkillState(playerSkills)
+  syncLearnedSkillsFromGongfaList(normalized, gongfaList)
+  return normalized
+}
+
 /** 规范化存档数据（兼容旧版本字段） */
 export function normalizeSaveData(data: GameSaveData): GameSaveData {
   const gongfaList = (data.gongfaList ?? []).map(normalizeGongfa)
@@ -150,18 +186,22 @@ export function normalizeSaveData(data: GameSaveData): GameSaveData {
   }
   const player = normalizePlayer(data.player)
   const activeGongfa = gongfaList.find((g) => g.id === data.activeGongfaId)
+  const playerSkills = normalizePlayerSkills(data.playerSkills, gongfaList)
   resyncPlayerCombatOnLoad(player, activeGongfa, reincarnation)
 
   return {
     ...data,
     player,
     gongfaList,
+    playerSkills,
     worldTime: data.worldTime ?? createInitialWorldTime(),
     dongfu: normalizeDongfu(data.dongfu),
     idle: {
       ...createDefaultIdleState(),
       ...data.idle,
+      mode: data.idle?.mode === 'gongfa' ? 'gongfa' : 'xiuwei',
       xiuweiRemainder: data.idle?.xiuweiRemainder ?? 0,
+      gongfaExpRemainder: data.idle?.gongfaExpRemainder ?? 0,
     },
     monsterTierPity: {
       ...createDefaultMonsterTierPityState(),
@@ -182,8 +222,12 @@ export function normalizeSaveData(data: GameSaveData): GameSaveData {
       ...data.titles,
       unlockedTitleIds: data.titles?.unlockedTitleIds ?? [],
     },
-    inventory: normalizeInventory(data.inventory),
+    inventory: normalizeInventory(
+      data.inventory,
+      player.spiritRootElements[0] ?? '火',
+    ),
     market: normalizeMarketState(data.market),
+    fabao: normalizeFabaoState(data.fabao),
   }
 }
 

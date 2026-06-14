@@ -1,14 +1,16 @@
 import { getRealmDiff } from '@/game/constants/realm'
 import {
-  getMonsterTierRewardMultiplier,
+  getMonsterBattleRewardMultiplier,
+  type MonsterKind,
   type MonsterTier,
 } from '@/game/models/monster'
 import {
   getSkillProficiencyRealmMultiplierByDiff,
+  SKILL_KILL_PROFICIENCY_BONUS_RATIO,
   SKILL_PROFICIENCY_BASE_GAIN,
   SKILL_PROFICIENCY_MIN_GAIN,
   type SkillLevel,
-} from '@/game/models/skill'
+} from '@/game/constants/skill-level'
 import type { RealmStage } from '@/game/types'
 
 export interface SkillProficiencyGainInput {
@@ -16,6 +18,8 @@ export interface SkillProficiencyGainInput {
   playerRealm: RealmStage
   /** 怪物境界 */
   monsterRealm: RealmStage
+  /** 怪物种类 */
+  monsterKind: MonsterKind
   /** 怪物品阶 */
   monsterTier: MonsterTier
 }
@@ -44,9 +48,21 @@ export function calcSkillProficiencyGain(input: SkillProficiencyGainInput): numb
     input.playerRealm,
     input.monsterRealm,
   )
-  const tierMultiplier = getMonsterTierRewardMultiplier(input.monsterTier)
-  const raw = SKILL_PROFICIENCY_BASE_GAIN * multiplier * tierMultiplier
+  const rewardMultiplier = getMonsterBattleRewardMultiplier(
+    input.monsterKind,
+    input.monsterTier,
+  )
+  const raw = SKILL_PROFICIENCY_BASE_GAIN * multiplier * rewardMultiplier
   return Math.max(SKILL_PROFICIENCY_MIN_GAIN, Math.floor(raw))
+}
+
+/**
+ * 以技能击杀怪物时的额外熟练度（在施展增量之外再结算）
+ */
+export function calcSkillKillProficiencyBonus(input: SkillProficiencyGainInput): number {
+  const baseGain = calcSkillProficiencyGain(input)
+  const bonus = Math.floor(baseGain * SKILL_KILL_PROFICIENCY_BONUS_RATIO)
+  return Math.max(SKILL_PROFICIENCY_MIN_GAIN, bonus)
 }
 
 /** 熟练度等级晋升结果 */

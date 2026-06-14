@@ -1,9 +1,10 @@
 import { getMonsterBattleMpRegenPercent } from '@/game/constants/combat-balance'
-import { isElementType } from '@/game/constants/elements'
+import { getCombatElementMultiplier, isElementType } from '@/game/constants/elements'
 import { getScaledSkillParams } from '@/game/constants/skill-params'
 import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import { calcFinalDamage } from '@/game/formulas/damage'
 import type { Gongfa } from '@/game/models/gongfa'
-import type { Monster } from '@/game/models/monster'
+import { getMonsterCombatElement, type Monster } from '@/game/models/monster'
 import {
   calcSkillCastMpCost,
   getSkillDamageMultiplier,
@@ -139,12 +140,13 @@ function resolveMonsterSkillAttackElement(
   gongfa: Gongfa | undefined,
   targetElement: ElementType,
 ): ElementType | undefined {
+  const combatElement = getMonsterCombatElement(monster)
   if (gongfa) {
-    return resolveSkillAttackElement(skill, gongfa.elements, monster.element, targetElement)
+    return resolveSkillAttackElement(skill, gongfa.elements, combatElement, targetElement)
   }
   const raw = skill.params.element
   if (isElementType(raw)) return raw
-  return monster.element
+  return combatElement
 }
 
 function buildMonsterAttacker(monster: Monster, penetration = monster.combat.penetration) {
@@ -193,6 +195,7 @@ export function executeMonsterAttack(
     tenacity: snapshot.tenacity,
     damageReduction: snapshot.damageReduction,
   }
+  const defenderImmuneToCounter = snapshot.immuneToElementCounter
 
   if (selectedSkill) {
     const attackElement = resolveMonsterSkillAttackElement(
@@ -215,6 +218,7 @@ export function executeMonsterAttack(
         defender,
         attackElement,
         skillMultiplier,
+        defenderImmuneToCounter,
       })
 
       const hitLabel = hitCount > 1 ? `（第 ${i + 1} 击）` : ''
@@ -249,6 +253,7 @@ export function executeMonsterAttack(
     source: 'monster',
     attacker: buildMonsterAttacker(monster),
     defender,
+    defenderImmuneToCounter,
   })
 
   if (result.hit) {
@@ -266,4 +271,84 @@ export function executeMonsterAttack(
   }
 
   return { logs, playerHpDelta }
+}
+
+/** 悲观的伤害估算：命中 + 暴击 + 最高波动 */
+const PESSIMISTIC_DAMAGE_RANDOM_FACTOR = 1.1
+
+/**
+ * 估算怪物 upcoming 一次行动对玩家的最大伤害（用于逃跑必死预判）
+ */
+export function estimateMonsterMaxRoundDamage(
+  monster: Monster,
+  snapshot: CombatSnapshot,
+  skillState: BattleMonsterSkillState,
+  playerDebuffs: PlayerBattleDebuffs,
+): number {
+  const simulatedState: BattleMonsterSkillState = {
+    monsterMp: skillState.monsterMp,
+    monsterMaxMp: skillState.monsterMaxMp,
+    skillCooldowns: { ...skillState.skillCooldowns },
+  }
+
+  const { skills, gongfa } = getMonsterBattleSkills(monster)
+  if (skills.length > 0) {
+    regenMonsterBattleMp(simulatedState, getMonsterBattleMpRegenPercent(monster.kind))
+  }
+  tickSkillCooldowns(simulatedState.skillCooldowns)
+
+  const selectedSkill = selectBestMonsterAttackSkill(skills, {
+    monsterMp: simulatedState.monsterMp,
+    monsterMaxMp: simulatedState.monsterMaxMp,
+    skillCooldowns: simulatedState.skillCooldowns,
+  })
+
+  const defender = {
+    defense: snapshot.defense,
+    speed: getEffectiveDefenderSpeed(snapshot.speed, playerDebuffs),
+    element: snapshot.defenseElement,
+    tenacity: snapshot.tenacity,
+    damageReduction: snapshot.damageReduction,
+  }
+  const elementOptions = { defenderImmuneToCounter: snapshot.immuneToElementCounter }
+
+  const calcHitDamage = (
+    skillMultiplier = 1,
+    penetration = monster.combat.penetration,
+    attackElement?: ElementType,
+  ): number => {
+    const elementMultiplier = attackElement
+      ? getCombatElementMultiplier(attackElement, defender.element, elementOptions)
+      : 1
+    return calcFinalDamage({
+      attack: monster.combat.attack,
+      skillMultiplier,
+      isCrit: true,
+      critDamage: monster.combat.critDamage,
+      targetDefense: defender.defense,
+      penetration,
+      elementMultiplier,
+      randomFactor: PESSIMISTIC_DAMAGE_RANDOM_FACTOR,
+      damageReduction: defender.damageReduction,
+    })
+  }
+
+  if (selectedSkill) {
+    const attackElement = resolveMonsterSkillAttackElement(
+      selectedSkill,
+      monster,
+      gongfa,
+      snapshot.defenseElement,
+    )
+    const hitCount = getSkillHitCount(selectedSkill)
+    const skillMultiplier = getSkillDamageMultiplier(selectedSkill, 0)
+    const penetration = getMonsterSkillExtraPenetration(selectedSkill, monster.combat.penetration)
+    let total = 0
+    for (let i = 0; i < hitCount; i += 1) {
+      total += calcHitDamage(skillMultiplier, penetration, attackElement)
+    }
+    return total
+  }
+
+  return calcHitDamage()
 }

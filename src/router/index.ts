@@ -25,15 +25,17 @@ const router = createRouter({
     },
     {
       path: '/cultivation',
-      name: 'cultivation',
-      component: () => import('@/views/CultivationView.vue'),
-      meta: { title: '修炼' },
+      redirect: '/home',
     },
     {
       path: '/gongfa',
       name: 'gongfa',
       component: () => import('@/views/GongfaView.vue'),
       meta: { title: '功法' },
+    },
+    {
+      path: '/skills',
+      redirect: { path: '/character', query: { tab: 'skill' } },
     },
     {
       path: '/battle',
@@ -49,9 +51,7 @@ const router = createRouter({
     },
     {
       path: '/achievement',
-      name: 'achievement',
-      component: () => import('@/views/AchievementView.vue'),
-      meta: { title: '成就' },
+      redirect: { path: '/character', query: { tab: 'achievement' } },
     },
     {
       path: '/market',
@@ -62,7 +62,7 @@ const router = createRouter({
   ],
 })
 
-const GAME_ROUTES = ['/home', '/cultivation', '/gongfa', '/battle', '/character', '/achievement', '/market']
+const GAME_ROUTES = ['/home', '/gongfa', '/battle', '/character', '/market']
 
 router.beforeEach((to) => {
   if (!GAME_ROUTES.includes(to.path)) return true

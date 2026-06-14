@@ -1,15 +1,19 @@
 import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import type { FabaoState } from '@/game/models/fabao'
 import type { Gongfa } from '@/game/models/gongfa'
 import type { ReincarnationCombatBonus } from '@/game/models/reincarnation'
 import type { CombatStats, Player } from '@/game/models/player'
+import type { AchievementState } from '@/game/models/achievement'
 import type { CombatStatBreakdown, CombatStatContribution } from '@/game/systems/stat-contributors/contribution'
 
-/** 战斗装配（主修功法、功法列表；后续扩展法器/宠物/Buff） */
+/** 战斗装配（主修功法、功法列表、法器） */
 export interface BattleLoadout {
   activeGongfa?: Gongfa
   gongfaList: Gongfa[]
   /** 当前佩戴的称号 id */
   equippedTitleId?: string | null
+  /** 法器状态 */
+  fabaoState?: FabaoState
 }
 
 /** 属性贡献者上下文 */
@@ -18,6 +22,8 @@ export interface StatContributorContext {
   loadout: BattleLoadout
   /** 多世轮回累积战斗加成 */
   reincarnationCombat?: ReincarnationCombatBonus | null
+  /** 成就状态（升级类成就永久属性加成） */
+  achievements?: AchievementState
 }
 
 /**

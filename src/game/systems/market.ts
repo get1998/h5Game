@@ -12,14 +12,27 @@ import {
   addItemToInventory,
   removeItemFromInventory,
   spendLingshi,
-  addLingshi,
+  addLingshiBreakdown,
+  addRandomElementLingshi,
   getItemCount,
+  getTotalLingshi,
+  listInventoryEntries,
 } from '@/game/systems/inventory'
 
 /** 交易结果 */
 export interface MarketTradeResult {
   success: boolean
   message: string
+}
+
+/** 批量出售结果 */
+export interface BatchMarketTradeResult extends MarketTradeResult {
+  /** 出售物品种类数 */
+  itemKinds?: number
+  /** 出售物品总件数 */
+  soldCount?: number
+  /** 获得灵石总数 */
+  totalGain?: number
 }
 
 /**
@@ -46,7 +59,7 @@ export function canBuyFromMarket(
   }
 
   const totalCost = listing.buyPrice * count
-  if (inventory.lingshi < totalCost) {
+  if (getTotalLingshi(inventory.lingshi) < totalCost) {
     return { ok: false, reason: '灵石不足' }
   }
 
@@ -76,13 +89,14 @@ export function buyFromMarket(
   const definition = getItemDefinition(itemId)!
   const totalCost = listing.buyPrice * count
 
-  if (!spendLingshi(inventory, totalCost)) {
+  const spendResult = spendLingshi(inventory, totalCost)
+  if (!spendResult.success) {
     return { success: false, message: '灵石不足' }
   }
 
   const addResult = addItemToInventory(inventory, itemId, count)
   if (!addResult.success || addResult.added < count) {
-    addLingshi(inventory, totalCost)
+    addLingshiBreakdown(inventory, spendResult.spent)
     return { success: false, message: addResult.message }
   }
 
@@ -133,11 +147,98 @@ export function sellToMarket(
     return { success: false, message: '数量不足' }
   }
 
-  addLingshi(inventory, totalGain)
+  addRandomElementLingshi(inventory, totalGain)
 
   return {
     success: true,
     message: `出售「${definition.name}」×${count}，获得 ${totalGain} 灵石`,
+  }
+}
+
+/**
+ * 向坊市出售背包中该物品的全部数量
+ */
+export function sellAllToMarket(
+  inventory: InventoryState,
+  itemId: string,
+): MarketTradeResult {
+  const count = getItemCount(inventory, itemId)
+  if (count <= 0) {
+    return { success: false, message: '数量不足' }
+  }
+  return sellToMarket(inventory, itemId, count)
+}
+
+/**
+ * 汇总背包中可批量出售的物品
+ */
+export function summarizeSellableInventory(inventory: InventoryState): {
+  itemKinds: number
+  soldCount: number
+  totalGain: number
+} {
+  let itemKinds = 0
+  let soldCount = 0
+  let totalGain = 0
+
+  for (const entry of listInventoryEntries(inventory)) {
+    if (entry.definition.sellPrice <= 0) continue
+    const check = canSellToMarket(inventory, entry.itemId, entry.count)
+    if (!check.ok || check.unitPrice == null) continue
+    itemKinds++
+    soldCount += entry.count
+    totalGain += check.unitPrice * entry.count
+  }
+
+  return { itemKinds, soldCount, totalGain }
+}
+
+/**
+ * 向坊市批量出售背包中全部可售物品
+ */
+export function sellAllSellableToMarket(
+  inventory: InventoryState,
+): BatchMarketTradeResult {
+  const entries = listInventoryEntries(inventory).filter(
+    (entry) => entry.definition.sellPrice > 0,
+  )
+
+  if (entries.length === 0) {
+    return { success: false, message: '没有可出售的物品' }
+  }
+
+  let itemKinds = 0
+  let soldCount = 0
+  let totalGain = 0
+  const soldNames: string[] = []
+
+  for (const entry of entries) {
+    const check = canSellToMarket(inventory, entry.itemId, entry.count)
+    if (!check.ok || check.unitPrice == null) continue
+
+    const result = sellToMarket(inventory, entry.itemId, entry.count)
+    if (!result.success) continue
+
+    itemKinds++
+    soldCount += entry.count
+    totalGain += check.unitPrice * entry.count
+    soldNames.push(`「${entry.definition.name}」×${entry.count}`)
+  }
+
+  if (itemKinds === 0) {
+    return { success: false, message: '没有可出售的物品' }
+  }
+
+  const message = soldNames.length <= 3
+    ? `批量出售 ${soldNames.join('、')}，共获得 ${totalGain} 灵石`
+    : `批量出售 ${itemKinds} 种物品共 ${soldCount} 件，获得 ${totalGain} 灵石`
+
+  return {
+    success: true,
+    message,
+    itemKinds,
+    soldCount,
+    totalGain,
   }
 }
 
@@ -164,12 +265,12 @@ export function canBuySpecialFromMarket(
     return { ok: false, reason: '无法定价' }
   }
 
-  if (inventory.lingshi < buyPrice) {
-    return { ok: false, reason: '灵石不足' }
+  if (getTotalLingshi(inventory.lingshi) < buyPrice) {
+    return { ok: false, reason: '灵石不足', buyPrice }
   }
 
   if (getItemCount(inventory, itemId) >= definition.maxStack) {
-    return { ok: false, reason: '背包堆叠已满' }
+    return { ok: false, reason: '背包堆叠已满', buyPrice }
   }
 
   return { ok: true, buyPrice }
@@ -190,13 +291,14 @@ export function buySpecialFromMarket(
   }
 
   const definition = getItemDefinition(itemId)!
-  if (!spendLingshi(inventory, check.buyPrice)) {
+  const spendResult = spendLingshi(inventory, check.buyPrice)
+  if (!spendResult.success) {
     return { success: false, message: '灵石不足' }
   }
 
   const addResult = addItemToInventory(inventory, itemId, 1)
   if (!addResult.success || addResult.added < 1) {
-    addLingshi(inventory, check.buyPrice)
+    addLingshiBreakdown(inventory, spendResult.spent)
     return { success: false, message: addResult.message }
   }
 

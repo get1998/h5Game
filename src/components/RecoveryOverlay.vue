@@ -20,7 +20,7 @@ const descText = computed(() => {
   if (gameStore.recoveryPhase === 'severe_injury') {
     return '连续战败五次，神魂受损，暂无法行动。'
   }
-  return `第 ${gameStore.consecutiveDefeatCount} 次调息，气血缓缓恢复中……`
+  return `连续第 ${gameStore.consecutiveDefeatCount} 次战败调息，气血缓缓恢复中……`
 })
 
 const progressPercent = computed(() => {

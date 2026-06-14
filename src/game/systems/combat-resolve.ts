@@ -49,6 +49,8 @@ export interface ResolveAttackInput {
   /** 攻击五行，缺省视为无属性加成 */
   attackElement?: ElementType
   skillMultiplier?: number
+  /** 受击方免疫五行被克 */
+  defenderImmuneToCounter?: boolean
 }
 
 /** 统一攻击结算结果 */
@@ -92,11 +94,12 @@ export function resolveAttack(input: ResolveAttackInput): ResolveAttackResult {
   const effectiveCritRate = Math.max(0, input.attacker.critRate - tenacity * 0.001)
   const isCrit = rollCrit(effectiveCritRate)
   const applyElement = shouldApplyElementCombat(input.source)
+  const elementOptions = { defenderImmuneToCounter: input.defenderImmuneToCounter }
   const elementMultiplier = applyElement
-    ? getCombatElementMultiplier(input.attackElement, input.defender.element)
+    ? getCombatElementMultiplier(input.attackElement, input.defender.element, elementOptions)
     : 1
   const elementHint = applyElement && input.attackElement
-    ? formatCombatElementHint(input.attackElement, input.defender.element)
+    ? formatCombatElementHint(input.attackElement, input.defender.element, elementOptions)
     : null
 
   let skillMultiplier = input.skillMultiplier ?? 1

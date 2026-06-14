@@ -1,20 +1,22 @@
 import {
-  MONSTER_REALM_GONGFA_EXP,
+  getMonsterGongfaExpBase,
   SPIRIT_ROOT_ADAPT_MULTIPLIER,
 } from '@/game/constants/gongfa'
 import {
   ELEMENT_HIDDEN_MULTIPLIER,
   getElementRelation,
 } from '@/game/constants/elements'
-import { getRealmMajor } from '@/game/constants/realm'
 import {
-  getMonsterTierRewardMultiplier,
+  getMonsterBattleRewardMultiplier,
+  type MonsterKind,
   type MonsterTier,
 } from '@/game/models/monster'
 import type { ElementType, RealmStage, SpiritRootType } from '@/game/types'
 
 export interface GongfaExpInput {
   monsterRealm: RealmStage
+  /** 怪物种类 */
+  monsterKind: MonsterKind
   monsterTier: MonsterTier
   spiritRootType: SpiritRootType
   spiritRootElements: ElementType[]
@@ -22,14 +24,14 @@ export interface GongfaExpInput {
 }
 
 /**
- * 计算功法经验增量
- * 基础经验 = 怪物境界固定经验 × 灵根适配倍率 × 五行隐藏系数 × 怪物品阶系数
- * 功法经验 = 基础经验 × 功法经验获取倍率
- * @param input 计算参数
- * @returns 功法经验增量
+ * 计算战斗击杀功法经验增量
+ *
+ * 基础经验 = 怪物小境基础经验 × 灵根适配 × 五行隐藏 × 种类品阶
+ * 功法经验 = 基础经验 × 玩家功法经验获取倍率（与玩家/怪物境界差无关）
  */
 export function calcGongfaExpGain(input: GongfaExpInput, gongfaExpMultiplier: number): number {
-  const baseExp = MONSTER_REALM_GONGFA_EXP[getRealmMajor(input.monsterRealm)]
+  const baseExp = getMonsterGongfaExpBase(input.monsterRealm)
+
   const adaptMultiplier = getSpiritRootAdaptMultiplier(
     input.spiritRootType,
     input.spiritRootElements,
@@ -39,11 +41,13 @@ export function calcGongfaExpGain(input: GongfaExpInput, gongfaExpMultiplier: nu
     input.spiritRootElements,
     input.gongfaElement,
   )
-  const tierMultiplier = getMonsterTierRewardMultiplier(input.monsterTier)
+  const rewardMultiplier = getMonsterBattleRewardMultiplier(
+    input.monsterKind,
+    input.monsterTier,
+  )
 
-  const raw = baseExp * adaptMultiplier * hiddenMultiplier * tierMultiplier
+  const raw = baseExp * adaptMultiplier * hiddenMultiplier * rewardMultiplier
   const floored = Math.floor(raw * gongfaExpMultiplier)
-  // 炼气期基础经验为 1，倍率相乘后常 < 1，直接取整会变成 0 导致无法升级
   if (floored > 0) return floored
   return raw > 0 ? 1 : 0
 }

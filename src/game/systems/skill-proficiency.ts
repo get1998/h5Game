@@ -1,6 +1,7 @@
 import type { SkillProficiencyLevelUpResult } from '@/game/formulas/skill-proficiency'
 import type { Gongfa } from '@/game/models/gongfa'
 import {
+  calcEffectiveSkillProficiencyGain,
   getSkillById,
   getSkillLevelFromProficiency,
   type SkillLevel,
@@ -22,13 +23,19 @@ export function addSkillProficiency(
 
   const map: SkillProficiencyMap = { ...gongfa.skillProficiency }
   const previousProficiency = map[skillId] ?? 0
-    const previousLevel = getSkillLevelFromProficiency(previousProficiency, gongfa.quality)
+  const effectiveGain = calcEffectiveSkillProficiencyGain(
+    previousProficiency,
+    gain,
+    gongfa.quality,
+  )
+  if (effectiveGain <= 0) return null
 
-    const nextProficiency = previousProficiency + gain
-    map[skillId] = nextProficiency
-    gongfa.skillProficiency = map
+  const previousLevel = getSkillLevelFromProficiency(previousProficiency, gongfa.quality)
+  const nextProficiency = previousProficiency + effectiveGain
+  map[skillId] = nextProficiency
+  gongfa.skillProficiency = map
 
-    const newLevel = getSkillLevelFromProficiency(nextProficiency, gongfa.quality)
+  const newLevel = getSkillLevelFromProficiency(nextProficiency, gongfa.quality)
   if (newLevel === previousLevel) return null
 
   return {
@@ -59,10 +66,17 @@ export function addSkillProficiencyBatch(
 
     const map: SkillProficiencyMap = { ...gongfa.skillProficiency }
     const previousProficiency = map[skillId] ?? 0
+    const effectiveGain = calcEffectiveSkillProficiencyGain(
+      previousProficiency,
+      amount,
+      gongfa.quality,
+    )
+    if (effectiveGain <= 0) continue
+
     const previousLevel = levelUps.get(skillId)
       ?? getSkillLevelFromProficiency(previousProficiency, gongfa.quality)
 
-    const nextProficiency = previousProficiency + amount
+    const nextProficiency = previousProficiency + effectiveGain
     map[skillId] = nextProficiency
     gongfa.skillProficiency = map
 

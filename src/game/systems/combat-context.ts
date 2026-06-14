@@ -1,6 +1,9 @@
 import { buildEffectiveCombatStats } from '@/game/systems/stat-contributors'
 import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import type { FabaoState } from '@/game/models/fabao'
 import type { Gongfa } from '@/game/models/gongfa'
+import type { AchievementState } from '@/game/models/achievement'
+import type { ReincarnationCombatBonus } from '@/game/models/reincarnation'
 import type { Monster } from '@/game/models/monster'
 import type { Player } from '@/game/models/player'
 import type { BattleSkillState } from '@/game/systems/skill-combat'
@@ -25,11 +28,25 @@ export function createBattleContext(
   gongfa: Gongfa,
   skillState: BattleSkillState,
   gongfaList: Gongfa[] = [],
+  fabaoState?: FabaoState,
+  extras?: {
+    equippedTitleId?: string | null
+    achievements?: AchievementState
+    reincarnationCombat?: ReincarnationCombatBonus | null
+  },
 ): BattleContext {
-  const { snapshot } = buildEffectiveCombatStats(player, {
-    activeGongfa: gongfa,
-    gongfaList,
-  })
+  const { snapshot } = buildEffectiveCombatStats(
+    player,
+    {
+      activeGongfa: gongfa,
+      gongfaList,
+      equippedTitleId: extras?.equippedTitleId,
+      fabaoState,
+    },
+    undefined,
+    extras?.reincarnationCombat,
+    extras?.achievements,
+  )
 
   return {
     player,

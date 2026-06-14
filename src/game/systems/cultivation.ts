@@ -17,6 +17,7 @@ import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
 import type { Dongfu } from '@/game/models/dongfu'
 import type { ReincarnationCultivationBonus } from '@/game/models/reincarnation'
 import type { Player } from '@/game/models/player'
+import type { InventoryState } from '@/game/models/item'
 import type { RealmStage } from '@/game/types'
 import {
   applyLingqiRecovery,
@@ -30,6 +31,8 @@ export interface CultivationTickResult {
   seconds: number
   dongfu: Dongfu
   xiuweiRemainder: number
+  /** 阵法因灵石不足停摆 */
+  zhenfaSuspended: boolean
 }
 
 export interface CultivationRateInfo {
@@ -114,6 +117,7 @@ export function calcIdleXiuwei(
   xiuweiRemainder = 0,
   now = Date.now(),
   reincarnationCultivation?: ReincarnationCultivationBonus | null,
+  inventory?: InventoryState,
 ): CultivationTickResult {
   if (elapsedSeconds <= 0) {
     return {
@@ -123,10 +127,11 @@ export function calcIdleXiuwei(
       seconds: 0,
       dongfu,
       xiuweiRemainder,
+      zhenfaSuspended: false,
     }
   }
 
-  const recovery = applyLingqiRecovery(dongfu, elapsedSeconds, true, now)
+  const recovery = applyLingqiRecovery(dongfu, elapsedSeconds, true, now, inventory)
   let workingDongfu = recovery.dongfu
 
   const room = getRealmXiuweiRoom(player)
@@ -138,6 +143,7 @@ export function calcIdleXiuwei(
       seconds: elapsedSeconds,
       dongfu: workingDongfu,
       xiuweiRemainder: 0,
+      zhenfaSuspended: recovery.zhenfaSuspended,
     }
   }
 
@@ -178,6 +184,7 @@ export function calcIdleXiuwei(
     seconds: elapsedSeconds,
     dongfu: workingDongfu,
     xiuweiRemainder: nextRemainder,
+    zhenfaSuspended: recovery.zhenfaSuspended,
   }
 }
 

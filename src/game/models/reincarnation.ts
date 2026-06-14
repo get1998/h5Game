@@ -48,6 +48,12 @@ export interface ReincarnationState {
   /** 寿元已尽，等待再入轮回 */
   isAwaitingReincarnation: boolean
   lastLife: LastLifeSummary | null
+  /** 五行汇总解锁进度（0~5，五世相生凡品圆满） */
+  wuxingSummaryProgress: number
+  /** 本世是否已完成当前步骤的凡品圆满 */
+  wuxingSummaryLifeStepDone: boolean
+  /** 是否已解锁《五行归元诀》 */
+  wuxingSummaryUnlocked: boolean
 }
 
 export function createEmptyReincarnationCombatBonus(): ReincarnationCombatBonus {
@@ -81,6 +87,9 @@ export function createDefaultReincarnationState(): ReincarnationState {
     cultivation: createEmptyReincarnationCultivationBonus(),
     isAwaitingReincarnation: false,
     lastLife: null,
+    wuxingSummaryProgress: 0,
+    wuxingSummaryLifeStepDone: false,
+    wuxingSummaryUnlocked: false,
   }
 }
 
@@ -218,6 +227,9 @@ export class Reincarnation {
   cultivation: ReincarnationCultivationBonus
   isAwaitingReincarnation: boolean
   lastLife: LastLifeSummary | null
+  wuxingSummaryProgress: number
+  wuxingSummaryLifeStepDone: boolean
+  wuxingSummaryUnlocked: boolean
 
   constructor(state?: Partial<ReincarnationState>) {
     const defaults = createDefaultReincarnationState()
@@ -226,6 +238,9 @@ export class Reincarnation {
     this.cultivation = { ...(state?.cultivation ?? defaults.cultivation) }
     this.isAwaitingReincarnation = state?.isAwaitingReincarnation ?? false
     this.lastLife = state?.lastLife ?? null
+    this.wuxingSummaryProgress = state?.wuxingSummaryProgress ?? defaults.wuxingSummaryProgress
+    this.wuxingSummaryLifeStepDone = state?.wuxingSummaryLifeStepDone ?? defaults.wuxingSummaryLifeStepDone
+    this.wuxingSummaryUnlocked = state?.wuxingSummaryUnlocked ?? defaults.wuxingSummaryUnlocked
   }
 
   static fromState(state?: ReincarnationState | null): Reincarnation {
@@ -240,6 +255,9 @@ export class Reincarnation {
       cultivation: { ...this.cultivation },
       isAwaitingReincarnation: this.isAwaitingReincarnation,
       lastLife: this.lastLife ? { ...this.lastLife } : null,
+      wuxingSummaryProgress: this.wuxingSummaryProgress,
+      wuxingSummaryLifeStepDone: this.wuxingSummaryLifeStepDone,
+      wuxingSummaryUnlocked: this.wuxingSummaryUnlocked,
     }
   }
 

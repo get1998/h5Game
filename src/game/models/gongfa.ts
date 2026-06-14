@@ -2,6 +2,8 @@ import {
   GONGFA_QUALITY_LEVEL_GROWTH,
   type GongfaQualityPerLevelGrowth,
 } from '@/game/constants/gongfa'
+import { getWuxingSummaryBaseStats } from '@/game/constants/wuxing-summary'
+import { WUXING_SUMMARY_GONGFA_ID } from '@/game/constants/wuxing-summary'
 import type { SkillProficiencyMap } from '@/game/models/skill'
 import type { ElementType, GongfaQuality } from '@/game/types'
 
@@ -100,6 +102,10 @@ export interface GongfaTemplate {
   permanentPassive: string
   /** 关联技能 id 列表（按解锁等级排序） */
   skillIds: string[]
+  /** 是否为五行汇总功法（受击免疫属性被克） */
+  isWuxingSummary?: boolean
+  /** 是否支持升品阶（实例 quality 可变） */
+  canUpgradeQuality?: boolean
 }
 
 /** 功法配置表（对齐 docs/gongfa_complete_v1.2.md） */
@@ -294,6 +300,48 @@ export const GONGFA_TEMPLATES: GongfaTemplate[] = [
     skillIds: ['canglang_1', 'canglang_2', 'canglang_3', 'canglang_4', 'canglang_5'],
   },
   {
+    id: 'gongfa_wuxinghuang',
+    name: '五行初融诀',
+    quality: '黄品',
+    element: '全',
+    elements: ['金', '木', '水', '火', '土'],
+    maxLevel: 10,
+    expMultiplier: 1.35,
+    attackBonus: 15,
+    defenseBonus: 12,
+    hpBonus: 50,
+    mpBonus: 30,
+    speedBonus: 0,
+    critRateBonus: 0,
+    critDamageBonus: 0,
+    penetrationBonus: 0,
+    tenacityBonus: 0,
+    description: '黄品五行功法，融五系初意，为归元升阶之基。',
+    permanentPassive: '全抗+1%',
+    skillIds: [],
+  },
+  {
+    id: 'gongfa_wuxingxuan',
+    name: '五行玄通诀',
+    quality: '玄品',
+    element: '全',
+    elements: ['金', '木', '水', '火', '土'],
+    maxLevel: 10,
+    expMultiplier: 1.9,
+    attackBonus: 35,
+    defenseBonus: 25,
+    hpBonus: 120,
+    mpBonus: 80,
+    speedBonus: 5,
+    critRateBonus: 0,
+    critDamageBonus: 0,
+    penetrationBonus: 0,
+    tenacityBonus: 0,
+    description: '玄品五行功法，五气玄通，可助归元诀破境升品。',
+    permanentPassive: '全抗+2%',
+    skillIds: [],
+  },
+  {
     id: 'gongfa_hunyuan',
     name: '混元五行功',
     quality: '地品',
@@ -334,6 +382,27 @@ export const GONGFA_TEMPLATES: GongfaTemplate[] = [
     description: '地品雷法功法，金火交融，雷系伤害毁天灭地。',
     permanentPassive: '暴击伤害+10%',
     skillIds: ['jiutian_1', 'jiutian_2', 'jiutian_3', 'jiutian_4', 'jiutian_5'],
+  },
+  {
+    id: 'gongfa_wuxingtian',
+    name: '五行天衍诀',
+    quality: '天品',
+    element: '五行',
+    elements: ['金', '木', '水', '火', '土'],
+    maxLevel: 10,
+    expMultiplier: 3,
+    attackBonus: 80,
+    defenseBonus: 60,
+    hpBonus: 300,
+    mpBonus: 200,
+    speedBonus: 15,
+    critRateBonus: 0.02,
+    critDamageBonus: 0,
+    penetrationBonus: 0,
+    tenacityBonus: 0,
+    description: '天品五行功法，天衍五运，归元升仙品前必修。',
+    permanentPassive: '全抗+4%',
+    skillIds: [],
   },
   {
     id: 'gongfa_taixu',
@@ -399,6 +468,27 @@ export const GONGFA_TEMPLATES: GongfaTemplate[] = [
     skillIds: ['xingchen_1', 'xingchen_2', 'xingchen_3', 'xingchen_4', 'xingchen_5'],
   },
   {
+    id: 'gongfa_wuxingxian',
+    name: '五行仙寰诀',
+    quality: '仙品',
+    element: '五行',
+    elements: ['金', '木', '水', '火', '土'],
+    maxLevel: 10,
+    expMultiplier: 4.2,
+    attackBonus: 150,
+    defenseBonus: 110,
+    hpBonus: 600,
+    mpBonus: 400,
+    speedBonus: 25,
+    critRateBonus: 0.05,
+    critDamageBonus: 0,
+    penetrationBonus: 0,
+    tenacityBonus: 0,
+    description: '仙品五行功法，仙寰五气归一，归元破神品之关。',
+    permanentPassive: '全抗+6%',
+    skillIds: [],
+  },
+  {
     id: 'gongfa_taigu',
     name: '太古造化诀',
     quality: '神品',
@@ -422,22 +512,24 @@ export const GONGFA_TEMPLATES: GongfaTemplate[] = [
   {
     id: 'gongfa_wuxingguiyuan',
     name: '五行归元诀',
-    quality: '仙品',
+    quality: '凡品',
     element: '五行',
     elements: ['金', '木', '水', '火', '土'],
     maxLevel: 10,
-    expMultiplier: 4,
-    attackBonus: 200,
-    defenseBonus: 150,
-    hpBonus: 1000,
-    mpBonus: 600,
-    speedBonus: 50,
-    critRateBonus: 0,
+    expMultiplier: 1.3,
+    attackBonus: 12,
+    defenseBonus: 10,
+    hpBonus: 60,
+    mpBonus: 40,
+    speedBonus: 4,
+    critRateBonus: 0.01,
     critDamageBonus: 0,
     penetrationBonus: 0,
     tenacityBonus: 0,
-    description: '仙品五行至法，需五行灵根，相生循环，攻防一体。',
-    permanentPassive: '五行相生循环+0.3，全属性抗性+5%',
+    description: '五行汇总至法，五世相生修炼凡品入门功法圆满后可领悟；受击不受属性克制，圆满且同品阶五行功法圆满后可升品阶。',
+    permanentPassive: '五行归元·免疫被克；升品需本功法与同品阶五行功法均圆满',
+    isWuxingSummary: true,
+    canUpgradeQuality: true,
     skillIds: [
       'wuxingguiyuan_1',
       'wuxingguiyuan_2',
@@ -487,6 +579,7 @@ function pickGrowthMidpoint(range: [number, number]): number {
 export function calcGongfaBonusesAtLevel(
   template: GongfaTemplate,
   level: number,
+  instanceQuality?: Gongfa['quality'],
 ): Pick<
   Gongfa,
   | 'attackBonus'
@@ -500,27 +593,50 @@ export function calcGongfaBonusesAtLevel(
   | 'tenacityBonus'
   | 'conversionRateBonus'
 > {
-  const growth = GONGFA_QUALITY_LEVEL_GROWTH[template.quality]
+  const quality = template.isWuxingSummary && instanceQuality
+    ? instanceQuality
+    : template.quality
+
+  let effectiveTemplate = template
+  if (template.isWuxingSummary && instanceQuality) {
+    const wuxingBase = getWuxingSummaryBaseStats(instanceQuality)
+    effectiveTemplate = {
+      ...template,
+      quality: instanceQuality,
+      attackBonus: wuxingBase.attackBonus,
+      defenseBonus: wuxingBase.defenseBonus,
+      hpBonus: wuxingBase.hpBonus,
+      mpBonus: wuxingBase.mpBonus,
+      speedBonus: wuxingBase.speedBonus,
+      critRateBonus: wuxingBase.critRateBonus,
+      critDamageBonus: 0,
+      penetrationBonus: wuxingBase.penetrationBonus,
+      tenacityBonus: wuxingBase.tenacityBonus,
+      expMultiplier: wuxingBase.expMultiplier,
+    }
+  }
+
+  const growth = GONGFA_QUALITY_LEVEL_GROWTH[quality]
   const levelUps = Math.max(0, Math.min(level - 1, template.maxLevel - 1))
   const roundStat = (value: number) => Math.round(value * 100) / 100
 
   const bonuses = {
-    attackBonus: template.attackBonus,
-    defenseBonus: template.defenseBonus,
-    hpBonus: template.hpBonus,
-    mpBonus: template.mpBonus,
-    speedBonus: template.speedBonus,
-    critRateBonus: template.critRateBonus,
-    critDamageBonus: template.critDamageBonus,
-    penetrationBonus: template.penetrationBonus,
-    tenacityBonus: template.tenacityBonus,
+    attackBonus: effectiveTemplate.attackBonus,
+    defenseBonus: effectiveTemplate.defenseBonus,
+    hpBonus: effectiveTemplate.hpBonus,
+    mpBonus: effectiveTemplate.mpBonus,
+    speedBonus: effectiveTemplate.speedBonus,
+    critRateBonus: effectiveTemplate.critRateBonus,
+    critDamageBonus: effectiveTemplate.critDamageBonus,
+    penetrationBonus: effectiveTemplate.penetrationBonus,
+    tenacityBonus: effectiveTemplate.tenacityBonus,
     conversionRateBonus: 0,
   }
 
   for (const [bonusKey, growthKey] of Object.entries(GONGFA_GROWTH_FIELD_MAP) as Array<
     [GongfaCombatBonusKey, keyof GongfaQualityPerLevelGrowth]
   >) {
-    const templateStatValue = template[bonusKey]
+    const templateStatValue = effectiveTemplate[bonusKey]
     if (templateStatValue > 0) {
       bonuses[bonusKey] = roundStat(
         templateStatValue + levelUps * pickGrowthMidpoint(growth[growthKey] as [number, number]),
@@ -542,7 +658,30 @@ export function syncGongfaLevelBonuses(gongfa: Gongfa): void {
   const template = getGongfaTemplate(gongfa.id)
   if (!template) return
 
-  Object.assign(gongfa, calcGongfaBonusesAtLevel(template, gongfa.level))
+  Object.assign(gongfa, calcGongfaBonusesAtLevel(template, gongfa.level, gongfa.quality))
+  if (template.isWuxingSummary) {
+    gongfa.expMultiplier = getWuxingSummaryBaseStats(gongfa.quality).expMultiplier
+  }
+}
+
+/**
+ * 是否为五行汇总功法实例
+ */
+export function isWuxingSummaryGongfa(gongfa: Pick<Gongfa, 'id'>): boolean {
+  const template = getGongfaTemplate(gongfa.id)
+  return Boolean(template?.isWuxingSummary)
+}
+
+/**
+ * 是否为完整五行功法模板（全/五行或五系齐全，不含五行归元诀本身）
+ */
+export function isFullWuxingGongfaTemplate(
+  template: Pick<GongfaTemplate, 'id' | 'element' | 'elements' | 'isWuxingSummary'>,
+): boolean {
+  if (template.isWuxingSummary || template.id === WUXING_SUMMARY_GONGFA_ID) return false
+  if (template.element === '全' || template.element === '五行') return true
+  const required: ElementType[] = ['金', '木', '水', '火', '土']
+  return required.every((element) => template.elements.includes(element))
 }
 
 /**
@@ -550,6 +689,15 @@ export function syncGongfaLevelBonuses(gongfa: Gongfa): void {
  */
 export function getGongfaTemplate(gongfaId: string): GongfaTemplate | undefined {
   return gongfaTemplateById.get(gongfaId)
+}
+
+/**
+ * 获取指定品阶的完整五行功法模板（升归元诀品阶之前修）
+ */
+export function getFullWuxingGongfaTemplateByQuality(quality: GongfaQuality): GongfaTemplate | undefined {
+  return GONGFA_TEMPLATES.find(
+    (template) => template.quality === quality && isFullWuxingGongfaTemplate(template),
+  )
 }
 
 /**

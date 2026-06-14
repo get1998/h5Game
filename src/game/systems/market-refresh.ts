@@ -1,4 +1,5 @@
 import {
+  DONGFU_UPGRADE_TREASURE_IDS,
   getDongfuTreasureMarketPrice,
   getMarketTreasureRefreshCandidates,
   MARKET_TREASURE_MAX_SPECIAL,
@@ -61,7 +62,12 @@ export function getSpecialMarketBuyPrice(itemId: string, dongfuLevel: number): n
   const definition = getItemDefinition(itemId)
   if (!definition || definition.category !== 'treasure') return null
 
-  return getDongfuTreasureMarketPrice(dongfuLevel + 1)
+  const targetLevel = Object.entries(DONGFU_UPGRADE_TREASURE_IDS).find(
+    ([, id]) => id === itemId,
+  )?.[0]
+  if (!targetLevel) return null
+
+  return getDongfuTreasureMarketPrice(Number(targetLevel))
 }
 
 /**

@@ -10,7 +10,7 @@ import {
 export const DONGFU_LINGQI_BUFFER_SECONDS = 90
 
 /** 非闭关时洞府基础恢复 = 锚点吸收率 × 该比例 */
-export const DONGFU_RECOVERY_RATIO = 0.12
+export const DONGFU_RECOVERY_RATIO = 1
 
 /** 洞府等级原始配置（灵气数值由锚点境界推算） */
 interface DongfuLevelSpec {

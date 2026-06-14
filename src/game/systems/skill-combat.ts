@@ -1,21 +1,59 @@
 import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
+import {
+  calcMonsterCombatPower,
+  calcPlayerCombatPower,
+  shouldForceFleeByCombatPower,
+} from '@/game/formulas/combat-power'
+import { calcFleeRate, rollFlee } from '@/game/formulas/damage'
 import { appendElementHint, resolveAttack } from '@/game/systems/combat-resolve'
+import type { PlayerBattleDebuffs } from '@/game/systems/battle-debuffs'
+import type { BattleMonsterSkillState } from '@/game/systems/monster-skill-combat'
+import { estimateMonsterMaxRoundDamage } from '@/game/systems/monster-skill-combat'
+import type { PlayerBattleSkillLoadout } from '@/game/systems/player-skill-library'
 import type { Gongfa } from '@/game/models/gongfa'
-import type { Monster } from '@/game/models/monster'
+import { getMonsterCombatElement, type Monster, type MonsterStatus } from '@/game/models/monster'
 import {
   canCastSkill,
+  getCastableAttackSkills,
   getScaledSkillParams,
   getSkillDamageMultiplier,
   getSkillHitCount,
   getSkillProficiency,
-  getUnlockedSkills,
   resolveSkillAttackElement,
-  selectBestAttackSkill,
   type Skill,
   type SkillCastContext,
-  type SkillCategory,
+  type SkillProficiencyMap,
 } from '@/game/models/skill'
 import type { BattleLogEntry, ElementType } from '@/game/types'
+
+/** 敌方状态为「普通」视为健康（弱化状态可捡漏，不触发逃跑） */
+export function isMonsterAtHealthyHp(
+  _monsterHp: number,
+  _monsterMaxHp: number,
+  status: MonsterStatus,
+): boolean {
+  return status === '普通'
+}
+
+function buildFleeSkillCastContext(
+  input: Pick<AutoFleeInput, 'skillState' | 'proficiencyMap'>,
+): SkillCastContext {
+  const skillCooldowns = { ...input.skillState.skillCooldowns }
+  tickSkillCooldowns(skillCooldowns)
+  return {
+    playerMp: input.skillState.playerMp,
+    skillCooldowns,
+    skillProficiency: input.proficiencyMap,
+  }
+}
+
+/**
+ * 是否仅剩普攻（无可用攻击 / 回复技能；与回合内 AI 选技一致，会先 tick 冷却）
+ */
+export function hasOnlyNormalAttackRemaining(input: AutoFleeInput): boolean {
+  const context = buildFleeSkillCastContext(input)
+  return !input.skills.some((skill) => canCastSkill(skill, context))
+}
 
 /** 单场战斗技能运行时状态 */
 export interface BattleSkillState {
@@ -124,46 +162,168 @@ export interface PlayerCombatHp {
   maxHp: number
 }
 
-function getCastableSkillsByCategory(
-  skills: Skill[],
-  category: SkillCategory,
-  context: SkillCastContext,
-): Skill[] {
-  return skills.filter((skill) => skill.category === category && canCastSkill(skill, context))
+/**
+ * 判断技能是否能在当前回合提供气血恢复
+ */
+function skillProvidesHpRegen(skill: Skill, context: SkillCastContext): boolean {
+  if (skill.category === 'heal') return true
+  if (skill.category !== 'buff' && skill.category !== 'defense') return false
+
+  const proficiency = getSkillProficiency(context.skillProficiency, skill.id)
+  const params = getScaledSkillParams(skill.params, proficiency)
+  const regenPercent = params.hp_regen_percent
+  return typeof regenPercent === 'number' && regenPercent > 0
 }
 
 /**
- * 自动选择本回合释放的主动 / 绝技
- * 优先：低血量回复 → 攻击 → 增益 / 防御
+ * 判断当前是否还有可用的回血手段（可释放且含气血恢复效果）
+ */
+export function hasAvailableHealingResources(
+  skills: Skill[],
+  context: SkillCastContext,
+): boolean {
+  return skills.some(
+    (skill) => canCastSkill(skill, context) && skillProvidesHpRegen(skill, context),
+  )
+}
+
+/**
+ * 判断当前是否还有可用的攻击技能（不含普攻）
+ */
+export function hasAvailableAttackSkillsBeyondNormal(
+  skills: Skill[],
+  context: SkillCastContext,
+): boolean {
+  return getCastableAttackSkills(skills, context).length > 0
+}
+
+/** 自动逃跑判定入参 */
+export interface AutoFleeInput {
+  playerHp: number
+  playerMaxHp: number
+  playerMaxMp: number
+  playerSpeed: number
+  monsterHp: number
+  monsterMaxHp: number
+  monsterStatus: MonsterStatus
+  monsterSpeed: number
+  skills: Skill[]
+  skillState: BattleSkillState
+  proficiencyMap: SkillProficiencyMap
+  snapshot: CombatSnapshot
+  playerDebuffs: PlayerBattleDebuffs
+  monsterSkillState: BattleMonsterSkillState
+  monster: Monster
+}
+
+/**
+ * 估算下一回合开始时的中毒伤害（若仍有中毒层数）
+ */
+export function estimateNextRoundPoisonDamage(
+  debuffs: PlayerBattleDebuffs,
+  playerMaxHp: number,
+): number {
+  if (debuffs.poisonRoundsLeft <= 0 || debuffs.poisonDamagePercent <= 0) {
+    return 0
+  }
+  return Math.max(1, Math.floor(playerMaxHp * debuffs.poisonDamagePercent))
+}
+
+/**
+ * 预判下一战斗回合后是否必死（悲观：下次怪物行动最大伤害 + 下回合初中毒）
+ */
+export function willPlayerDieNextCombatRound(input: AutoFleeInput): boolean {
+  if (input.playerMaxHp <= 0 || input.playerHp <= 0) return false
+
+  const monsterDamage = estimateMonsterMaxRoundDamage(
+    input.monster,
+    input.snapshot,
+    input.monsterSkillState,
+    input.playerDebuffs,
+  )
+  const poisonDamage = estimateNextRoundPoisonDamage(input.playerDebuffs, input.playerMaxHp)
+  const projectedHp = input.playerHp - monsterDamage - poisonDamage
+
+  return projectedHp <= 0
+}
+
+/**
+ * 是否因战斗力差距过大而必须撤离
+ */
+export function shouldForceFleeByCombatPowerGap(input: AutoFleeInput): boolean {
+  const playerPower = calcPlayerCombatPower(
+    input.snapshot,
+    input.playerMaxHp,
+    input.playerMaxMp,
+  )
+  const monsterPower = calcMonsterCombatPower(input.monster)
+  return shouldForceFleeByCombatPower(playerPower, monsterPower)
+}
+
+/**
+ * 是否满足自动逃跑触发条件
+ */
+export function canAttemptAutoFlee(input: AutoFleeInput): boolean {
+  if (input.playerMaxHp <= 0 || input.playerHp <= 0) return false
+  if (!willPlayerDieNextCombatRound(input)) return false
+  if (!hasOnlyNormalAttackRemaining(input)) return false
+  if (!isMonsterAtHealthyHp(input.monsterHp, input.monsterMaxHp, input.monsterStatus)) {
+    return false
+  }
+
+  return true
+}
+
+/** 自动逃跑判定结果 */
+export interface AutoFleeAttemptResult {
+  /** 是否满足逃跑触发条件 */
+  attempted: boolean
+  /** 是否成功脱身 */
+  fled: boolean
+  /** 本次逃跑成功率（0~1） */
+  fleeRate: number
+  /** 是否因战斗力差距过大而直接撤离 */
+  forcedByCombatPower?: boolean
+}
+
+/**
+ * 尝试自动逃跑：战斗力碾压则必逃；否则按濒死预判 + 速度掷骰
+ */
+export function tryAutoFlee(input: AutoFleeInput): AutoFleeAttemptResult {
+  const noAttempt: AutoFleeAttemptResult = { attempted: false, fled: false, fleeRate: 0 }
+
+  if (shouldForceFleeByCombatPowerGap(input)) {
+    return {
+      attempted: true,
+      fled: true,
+      fleeRate: 1,
+      forcedByCombatPower: true,
+    }
+  }
+
+  if (!canAttemptAutoFlee(input)) return noAttempt
+
+  const fleeRate = calcFleeRate(input.playerSpeed, input.monsterSpeed)
+  return {
+    attempted: true,
+    fled: rollFlee(fleeRate),
+    fleeRate,
+  }
+}
+
+/**
+ * 按技能栏顺序选择本回合释放的技能
+ * 优先使用栏位靠前的技能；灵力不足或冷却中时依次尝试下一栏
  */
 export function selectPlayerCastSkill(
   skills: Skill[],
   context: SkillCastContext,
-  playerHpRatio: number,
 ): Skill | undefined {
-  if (playerHpRatio < 0.55) {
-    const healSkills = getCastableSkillsByCategory(skills, 'heal', context)
-      .sort((a, b) => {
-        const profA = getSkillProficiency(context.skillProficiency, a.id)
-        const profB = getSkillProficiency(context.skillProficiency, b.id)
-        const healA = Number(getScaledSkillParams(a.params, profA).hp_regen_percent) || 0
-        const healB = Number(getScaledSkillParams(b.params, profB).hp_regen_percent) || 0
-        return healB - healA
-      })
-    if (healSkills[0]) return healSkills[0]
+  for (const skill of skills) {
+    if (canCastSkill(skill, context)) {
+      return skill
+    }
   }
-
-  const attackSkill = selectBestAttackSkill(skills, context)
-  if (attackSkill) return attackSkill
-
-  const supportSkills = [
-    ...getCastableSkillsByCategory(skills, 'buff', context),
-    ...getCastableSkillsByCategory(skills, 'defense', context),
-  ]
-  if (supportSkills.length > 0) {
-    return supportSkills[0]
-  }
-
   return undefined
 }
 
@@ -182,12 +342,13 @@ function applySelfHealFromSkill(
 }
 
 /**
- * 玩家回合：自动选择可释放主动技能（攻击 / 回复 / 增益），否则普通攻击
+ * 玩家回合：按技能栏优先级释放，资源不足时顺延；均不可用则普通攻击
  */
 export function executePlayerAttack(
   snapshot: CombatSnapshot,
   monster: Monster,
-  gongfa: Gongfa,
+  activeGongfa: Gongfa,
+  skillLoadout: PlayerBattleSkillLoadout,
   skillState: BattleSkillState,
   createLog: LogFactory,
   playerHpState: PlayerCombatHp,
@@ -197,25 +358,24 @@ export function executePlayerAttack(
 
   tickBattleSkillCooldowns(skillState)
 
-  const unlockedSkills = getUnlockedSkills(gongfa.id, gongfa.level)
+  const battleSkills = skillLoadout.skills
   const castContext: SkillCastContext = {
     playerMp: skillState.playerMp,
     skillCooldowns: skillState.skillCooldowns,
-    skillProficiency: gongfa.skillProficiency,
+    skillProficiency: skillLoadout.proficiencyMap,
   }
-  const hpRatio = playerHpState.maxHp > 0
-    ? playerHpState.hp / playerHpState.maxHp
-    : 1
-  const selectedSkill = selectPlayerCastSkill(unlockedSkills, castContext, hpRatio)
+  const selectedSkill = selectPlayerCastSkill(battleSkills, castContext)
 
+  const monsterCombatElement = getMonsterCombatElement(monster)
   const defender = {
     defense: monster.combat.defense,
     speed: monster.combat.speed,
-    element: monster.element,
+    element: monsterCombatElement,
   }
 
   if (selectedSkill) {
-    const proficiency = getSkillProficiency(gongfa.skillProficiency, selectedSkill.id)
+    const proficiency = getSkillProficiency(skillLoadout.proficiencyMap, selectedSkill.id)
+    const sourceGongfa = skillLoadout.gongfaById.get(selectedSkill.sourceGongfaId) ?? activeGongfa
     applySkillCast(skillState, selectedSkill)
     logs.push(createLog(`你施展「${selectedSkill.name}」！`, 'info'))
 
@@ -249,9 +409,9 @@ export function executePlayerAttack(
 
     const attackElement = resolvePlayerAttackElement(
       selectedSkill,
-      gongfa,
+      sourceGongfa,
       snapshot,
-      monster.element,
+      monsterCombatElement,
     )
     const hitCount = getSkillHitCount(selectedSkill)
     const skillMultiplier = getSkillDamageMultiplier(selectedSkill, proficiency)

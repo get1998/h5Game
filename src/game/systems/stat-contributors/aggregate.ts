@@ -12,7 +12,9 @@ import {
   PASSIVE_STAT_CONTRIBUTOR_ID,
   passiveStatContributor,
 } from '@/game/systems/stat-contributors/passive-contributor'
+import { fabaoStatContributor } from '@/game/systems/stat-contributors/fabao-contributor'
 import { titleStatContributor } from '@/game/systems/stat-contributors/title-contributor'
+import { achievementStatContributor } from '@/game/systems/stat-contributors/achievement-contributor'
 import { reincarnationStatContributor } from '@/game/systems/stat-contributors/reincarnation-contributor'
 import type { CombatStats, Player } from '@/game/models/player'
 import type {
@@ -24,7 +26,9 @@ import type {
 export const DEFAULT_STAT_CONTRIBUTORS: StatContributor[] = [
   gongfaStatContributor,
   passiveStatContributor,
+  fabaoStatContributor,
   titleStatContributor,
+  achievementStatContributor,
   reincarnationStatContributor,
 ]
 

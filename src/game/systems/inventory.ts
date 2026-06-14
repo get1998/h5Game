@@ -1,19 +1,19 @@
 import { getItemDefinition } from '@/game/constants/items'
+import { ALL_ELEMENTS } from '@/game/constants/elements'
 import type { ItemDefinition } from '@/game/models/item'
 import type { InventoryState } from '@/game/models/item'
-import type { Player } from '@/game/models/player'
-import { getRealmXiuweiRoom, isRealmXiuweiFull } from '@/game/constants/realm'
+import {
+  createEmptyLingshi,
+  getTotalLingshi,
+  pickRandomLingshiElement,
+  type LingshiByElement,
+} from '@/game/models/lingshi'
+import type { ElementType } from '@/game/types'
 
 /** 添加物品结果 */
 export interface AddItemResult {
   success: boolean
   added: number
-  message: string
-}
-
-/** 使用物品结果 */
-export interface UseItemResult {
-  success: boolean
   message: string
 }
 
@@ -87,112 +87,114 @@ export function removeItemFromInventory(
   return true
 }
 
+/** 扣除灵石结果 */
+export interface SpendLingshiResult {
+  success: boolean
+  spent: LingshiByElement
+}
+
+export { getTotalLingshi, listNonemptyLingshi } from '@/game/models/lingshi'
+
 /**
- * 增加灵石
+ * 增加指定属性的灵石
  */
-export function addLingshi(inventory: InventoryState, amount: number): number {
+export function addLingshi(
+  inventory: InventoryState,
+  amount: number,
+  element: ElementType,
+): number {
   if (amount <= 0) return 0
-  inventory.lingshi += amount
+  inventory.lingshi[element] = (inventory.lingshi[element] ?? 0) + amount
   return amount
 }
 
 /**
- * 扣除灵石（不足则失败）
+ * 批量增加五行灵石
  */
-export function spendLingshi(inventory: InventoryState, amount: number): boolean {
-  if (amount <= 0) return true
-  if (inventory.lingshi < amount) return false
-  inventory.lingshi -= amount
+export function addLingshiBreakdown(
+  inventory: InventoryState,
+  breakdown: LingshiByElement,
+): number {
+  let added = 0
+  for (const element of ALL_ELEMENTS) {
+    const amount = breakdown[element] ?? 0
+    if (amount > 0) {
+      added += addLingshi(inventory, amount, element)
+    }
+  }
+  return added
+}
+
+/**
+ * 增加无属性偏向的灵石（随机归入某一系）
+ */
+export function addRandomElementLingshi(inventory: InventoryState, amount: number): number {
+  if (amount <= 0) return 0
+  return addLingshi(inventory, amount, pickRandomLingshiElement())
+}
+
+/**
+ * 扣除灵石（按金→木→水→火→土顺序消耗，任意属性均可支付）
+ */
+export function spendLingshi(inventory: InventoryState, amount: number): SpendLingshiResult {
+  const spent = createEmptyLingshi()
+  if (amount <= 0) {
+    return { success: true, spent }
+  }
+  if (getTotalLingshi(inventory.lingshi) < amount) {
+    return { success: false, spent }
+  }
+
+  let remaining = amount
+  for (const element of ALL_ELEMENTS) {
+    if (remaining <= 0) break
+    const available = inventory.lingshi[element] ?? 0
+    const take = Math.min(available, remaining)
+    if (take > 0) {
+      inventory.lingshi[element] = available - take
+      spent[element] = take
+      remaining -= take
+    }
+  }
+
+  return { success: remaining === 0, spent }
+}
+
+/**
+ * 检测五行灵石是否满足指定各系消耗
+ */
+export function hasLingshiBreakdown(
+  inventory: InventoryState,
+  required: LingshiByElement,
+): boolean {
+  for (const element of ALL_ELEMENTS) {
+    const need = required[element] ?? 0
+    if (need <= 0) continue
+    if ((inventory.lingshi[element] ?? 0) < need) return false
+  }
   return true
 }
 
 /**
- * 应用消耗品效果到玩家
+ * 按指定五行比例扣除灵石（布阵等场景）
  */
-function applyItemEffect(
-  player: Player,
-  definition: ItemDefinition,
-  effectiveMaxHp: number,
-  effectiveMaxMp: number,
-): string {
-  const effect = definition.effect
-  if (!effect) return '该物品无法使用'
-
-  switch (effect.type) {
-    case 'restore_hp': {
-      const gain = Math.floor(effectiveMaxHp * effect.percent)
-      const before = player.combat.hp
-      player.combat.hp = Math.min(effectiveMaxHp, before + gain)
-      return `恢复气血 ${player.combat.hp - before} 点`
-    }
-    case 'restore_mp': {
-      const gain = Math.floor(effectiveMaxMp * effect.percent)
-      const before = player.combat.mp
-      player.combat.mp = Math.min(effectiveMaxMp, before + gain)
-      return `恢复灵力 ${player.combat.mp - before} 点`
-    }
-    case 'add_xiuwei': {
-      if (isRealmXiuweiFull(player)) {
-        return '修为已满，请先突破'
-      }
-      const room = getRealmXiuweiRoom(player)
-      if (room <= 0) {
-        return '修为已满，请先突破'
-      }
-      const before = player.xiuwei
-      player.xiuwei += Math.min(effect.amount, room)
-      return `增进修为 ${player.xiuwei - before} 点`
-    }
-    case 'reduce_pill_poison': {
-      const before = player.special.pillPoison
-      player.special.pillPoison = Math.max(0, before - effect.amount)
-      return `丹毒降低 ${before - player.special.pillPoison} 点`
-    }
-    default:
-      return '未知效果'
-  }
-}
-
-/**
- * 使用消耗品
- */
-export function useConsumableItem(
+export function spendLingshiBreakdown(
   inventory: InventoryState,
-  player: Player,
-  itemId: string,
-  effectiveMaxHp: number,
-  effectiveMaxMp: number,
-): UseItemResult {
-  const definition = getItemDefinition(itemId)
-  if (!definition) {
-    return { success: false, message: '物品不存在' }
-  }
-  if (definition.category !== 'consumable') {
-    return { success: false, message: '该物品不可直接使用' }
-  }
-  if (getItemCount(inventory, itemId) <= 0) {
-    return { success: false, message: '物品数量不足' }
+  required: LingshiByElement,
+): SpendLingshiResult {
+  const spent = createEmptyLingshi()
+  if (!hasLingshiBreakdown(inventory, required)) {
+    return { success: false, spent }
   }
 
-  const effectText = applyItemEffect(player, definition, effectiveMaxHp, effectiveMaxMp)
-  if (effectText === '修为已满，请先突破') {
-    return { success: false, message: effectText }
+  for (const element of ALL_ELEMENTS) {
+    const amount = required[element] ?? 0
+    if (amount <= 0) continue
+    inventory.lingshi[element] = (inventory.lingshi[element] ?? 0) - amount
+    spent[element] = amount
   }
 
-  removeItemFromInventory(inventory, itemId, 1)
-
-  if (
-    definition.effect?.type === 'restore_hp'
-    || definition.effect?.type === 'restore_mp'
-    || definition.effect?.type === 'add_xiuwei'
-  ) {
-    player.special.pillPoison += 1
-  }
-
-  return {
-    success: true,
-    message: `使用「${definition.name}」，${effectText}`,
-  }
+  return { success: true, spent }
 }
 
 /**

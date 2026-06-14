@@ -83,11 +83,11 @@ export function rollMapLoot(
 export function getTierLootMultiplier(tier: '普通' | '精英' | '首领' | '传奇'): number {
   switch (tier) {
     case '精英':
-      return 1.25
+      return 1.8
     case '首领':
-      return 1.5
+      return 2.4
     case '传奇':
-      return 2
+      return 3.2
     default:
       return 1
   }

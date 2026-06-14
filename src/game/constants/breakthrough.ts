@@ -66,6 +66,25 @@ export const BREAKTHROUGH_GONGFA_QUALITY_BONUS: Record<string, number> = {
   神品: 0.12,
 }
 
+/** 功法等级占用气脉，满级时达到该惩罚上限（降低突破成功率） */
+export const BREAKTHROUGH_GONGFA_LEVEL_PENALTY_MAX = 0.06
+
+/** 功法属性折算突破成功率加成上限 */
+export const BREAKTHROUGH_GONGFA_STAT_BONUS_CAP = 0.12
+
+/** 功法属性折算突破成功率权重（与等级修正相乘） */
+export const BREAKTHROUGH_GONGFA_STAT_WEIGHTS = {
+  attack: 0.0008,
+  defense: 0.0005,
+  hp: 0.00004,
+  mp: 0.00006,
+  speed: 0.0004,
+  critRate: 0.15,
+  critDamage: 0.02,
+  penetration: 0.0004,
+  tenacity: 0.0004,
+} as const
+
 /**
  * 判断是否为大境界突破（如炼气 → 筑基）
  */

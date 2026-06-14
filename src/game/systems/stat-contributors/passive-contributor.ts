@@ -1,8 +1,10 @@
+import { getSkillMasteryPassiveContribution, isSkillMasteryPassiveUnlocked } from '@/game/constants/skill-mastery-passive'
 import { getScaledSkillParams } from '@/game/constants/skill-params'
 import type { Gongfa } from '@/game/models/gongfa'
 import {
   getSkillProficiency,
   getSkillsByGongfaId,
+  getUnlockedSkills,
   isPermanentPassiveSkill,
   type Skill,
 } from '@/game/models/skill'
@@ -75,7 +77,26 @@ export function extractPassiveSkillContribution(
 }
 
 /**
- * 汇总全部功法已领悟永久被动对面板的加成
+ * 汇总全部功法中已达圆满技能的永久被动加成
+ */
+export function aggregateSkillMasteryPassiveContributions(
+  gongfaList: Gongfa[],
+): CombatStatContribution {
+  const items: CombatStatContribution[] = []
+
+  for (const gongfa of gongfaList) {
+    for (const skill of getUnlockedSkills(gongfa.id, gongfa.level)) {
+      const proficiency = getSkillProficiency(gongfa.skillProficiency, skill.id)
+      if (!isSkillMasteryPassiveUnlocked(proficiency, gongfa.quality)) continue
+      items.push(getSkillMasteryPassiveContribution(skill.category, skill.type, gongfa.quality))
+    }
+  }
+
+  return mergeCombatContributions(...items)
+}
+
+/**
+ * 汇总全部功法已领悟永久被动对面板的加成（含圆满技能额外被动）
  */
 export function aggregatePermanentPassiveContributions(
   gongfaList: Gongfa[],
@@ -89,6 +110,7 @@ export function aggregatePermanentPassiveContributions(
     }
   }
 
+  items.push(aggregateSkillMasteryPassiveContributions(gongfaList))
   return mergeCombatContributions(...items)
 }
 

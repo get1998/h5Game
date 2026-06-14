@@ -61,10 +61,17 @@ export const DEFAULT_MONSTER_TIER_RATES: Record<MonsterTier, number> = {
 
 /** 怪物品阶对功法经验 / 技能熟练度的获取倍率 */
 export const MONSTER_TIER_REWARD_MULTIPLIERS: Record<MonsterTier, number> = {
-  普通: 1,
-  精英: 1.25,
-  首领: 1.5,
-  传奇: 2,
+  普通: 1.2,
+  精英: 2,
+  首领: 2.6,
+  传奇: 3.5,
+}
+
+/** 怪物种类对功法经验 / 技能熟练度的获取倍率 */
+export const MONSTER_KIND_REWARD_MULTIPLIERS: Record<MonsterKind, number> = {
+  妖兽: 1,
+  灵兽: 1.3,
+  人: 1.45,
 }
 
 /**
@@ -72,6 +79,23 @@ export const MONSTER_TIER_REWARD_MULTIPLIERS: Record<MonsterTier, number> = {
  */
 export function getMonsterTierRewardMultiplier(tier: MonsterTier): number {
   return MONSTER_TIER_REWARD_MULTIPLIERS[tier]
+}
+
+/**
+ * 获取怪物种类对应的功法经验 / 熟练度奖励倍率
+ */
+export function getMonsterKindRewardMultiplier(kind: MonsterKind): number {
+  return MONSTER_KIND_REWARD_MULTIPLIERS[kind]
+}
+
+/**
+ * 击杀奖励综合倍率 = 种类 × 品阶
+ */
+export function getMonsterBattleRewardMultiplier(
+  kind: MonsterKind,
+  tier: MonsterTier,
+): number {
+  return getMonsterKindRewardMultiplier(kind) * getMonsterTierRewardMultiplier(tier)
 }
 
 /** @deprecated 使用 DEFAULT_MONSTER_TIER_RATES 或地图 monsterTierRates */
@@ -322,15 +346,18 @@ export function formatMonsterDisplayName(
 }
 
 /**
- * 获取怪物攻击时使用的五行属性（人型优先取所修功法属性）
+ * 获取怪物战斗五行属性（克制结算用；人型优先取所修功法属性，妖兽/灵兽取种族属性）
  */
-export function getMonsterAttackElement(monster: Monster): ElementType {
+export function getMonsterCombatElement(monster: Monster): ElementType {
   if (monster.gongfaId) {
     const template = getGongfaTemplate(monster.gongfaId)
     if (template) return getGongfaTemplatePrimaryElement(template)
   }
   return monster.element
 }
+
+/** @deprecated 使用 getMonsterCombatElement */
+export const getMonsterAttackElement = getMonsterCombatElement
 
 /**
  * 从怪物模板创建实例（遇怪时合成战斗属性并固化）

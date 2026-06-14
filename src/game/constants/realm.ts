@@ -75,8 +75,8 @@ interface RealmStageData {
 }
 
 /**
- * 炼气 1~15 层（累计修为约 3000；寿元 100→115）
- * 战斗属性 ×2.5、突破修为 ×3，与凡品功法等级等比成长对齐
+ * 炼气 1~15 层（累计修为约 6000；寿元 100→115）
+ * 战斗属性 ×2.5、突破修为基准 ×3 × 全局倍率，与凡品功法等级等比成长对齐
  */
 const QI_REFINING_STAGE_DATA: readonly RealmStageData[] = [
   { breakthroughXiuwei: 108, lifespan: 100, maxHp: 250, maxMp: 125, attack: 25, defense: 13, speed: 25, shenshi: 1, bodyStrength: 1 },
@@ -97,7 +97,7 @@ const QI_REFINING_STAGE_DATA: readonly RealmStageData[] = [
 ]
 
 /**
- * 筑基各小境（累计修为约 +12000；寿元 200→300）
+ * 筑基各小境（累计修为约 +24000；寿元 200→300）
  */
 const FOUNDATION_STAGE_DATA: readonly RealmStageData[] = [
   { breakthroughXiuwei: 2400, lifespan: 200, maxHp: 1250, maxMp: 750, attack: 125, defense: 75, speed: 100, shenshi: 20, bodyStrength: 20 },
@@ -107,7 +107,7 @@ const FOUNDATION_STAGE_DATA: readonly RealmStageData[] = [
 ]
 
 /**
- * 金丹各小境（累计修为约 +45000；寿元 500→860）
+ * 金丹各小境（累计修为约 +90000；寿元 500→860）
  */
 const GOLDEN_CORE_STAGE_DATA: readonly RealmStageData[] = [
   { breakthroughXiuwei: 9000, lifespan: 500, maxHp: 5000, maxMp: 2500, attack: 375, defense: 250, speed: 200, shenshi: 50, bodyStrength: 50 },
@@ -117,7 +117,7 @@ const GOLDEN_CORE_STAGE_DATA: readonly RealmStageData[] = [
 ]
 
 /**
- * 元婴各小境（累计修为约 +240000；寿元 1000→2200）
+ * 元婴各小境（累计修为约 +480000；寿元 1000→2200）
  */
 const NASCENT_SOUL_STAGE_DATA: readonly RealmStageData[] = [
   { breakthroughXiuwei: 45000, lifespan: 1000, maxHp: 12500, maxMp: 7500, attack: 1000, defense: 625, speed: 375, shenshi: 100, bodyStrength: 100 },
@@ -127,7 +127,7 @@ const NASCENT_SOUL_STAGE_DATA: readonly RealmStageData[] = [
 ]
 
 /**
- * 化神各小境（累计修为约 +600000；寿元 3000→6000）
+ * 化神各小境（累计修为约 +1200000；寿元 3000→6000）
  * 化神大圆满为当前版本顶境，突破所需修为设为极大值
  */
 const SPIRIT_SEVERANCE_STAGE_DATA: readonly RealmStageData[] = [
@@ -149,6 +149,14 @@ const MAJOR_STAGE_DATA: Record<
 
 /** 化神大圆满突破所需修为（当前版本顶境） */
 const SPIRIT_SEVERANCE_PEAK_XIUWEI = 999999
+
+/** 突破修为全局倍率（表内基准 × 该系数 = 实际突破所需） */
+export const REALM_BREAKTHROUGH_XIUWEI_SCALE = 2
+
+function scaleBreakthroughXiuwei(base: number): number {
+  if (base >= SPIRIT_SEVERANCE_PEAK_XIUWEI) return base
+  return Math.round(base * REALM_BREAKTHROUGH_XIUWEI_SCALE)
+}
 
 function buildRealmStageDataMap(): Record<RealmStage, RealmStageData> {
   const result = {} as Record<RealmStage, RealmStageData>
@@ -190,7 +198,10 @@ export const REALM_LIFESPAN: Record<RealmStage, number> = Object.fromEntries(
 
 /** 各小境界突破所需修为 */
 export const REALM_BREAKTHROUGH_XIUWEI: Record<RealmStage, number> = Object.fromEntries(
-  REALM_ORDER.map((realm) => [realm, REALM_STAGE_DATA[realm].breakthroughXiuwei]),
+  REALM_ORDER.map((realm) => [
+    realm,
+    scaleBreakthroughXiuwei(REALM_STAGE_DATA[realm].breakthroughXiuwei),
+  ]),
 ) as Record<RealmStage, number>
 
 /**
@@ -472,7 +483,8 @@ export function pickRandomRealmInRange(
 
 /**
  * 在 [minRealm, maxRealm] 闭区间内按权重随机选取境界（低境界权重更高）
- * 权重规则：区间内从低到高依次为 span、span-1、…、1
+ * 权重规则：区间内从低到高依次为 span²、(span-1)²、…、1²
+ * 例：span=4 时权重 16,9,4,1 → 约 53% / 30% / 13% / 3%（线性递减约 40% / 30% / 20% / 10%）
  */
 export function pickRandomRealmInRangeWeighted(
   minRealm: RealmStage,
@@ -490,12 +502,14 @@ export function pickRandomRealmInRangeWeighted(
 
   let totalWeight = 0
   for (let i = 0; i < span; i++) {
-    totalWeight += span - i
+    const tier = span - i
+    totalWeight += tier * tier
   }
 
   let roll = Math.random() * totalWeight
   for (let i = 0; i < span; i++) {
-    roll -= span - i
+    const tier = span - i
+    roll -= tier * tier
     if (roll <= 0) {
       return REALM_ORDER[low + i]
     }

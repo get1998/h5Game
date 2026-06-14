@@ -12,11 +12,10 @@ export interface MarketListing {
 
 /** 坊市商品列表 */
 export const MARKET_LISTINGS: MarketListing[] = [
-  { itemId: 'item_huiqi_dan', buyPrice: 50 },
-  { itemId: 'item_yuxue_dan', buyPrice: 50 },
-  { itemId: 'item_peiyuan_dan', buyPrice: 200, requiredRealm: '炼气三层' },
-  { itemId: 'item_qingling_dan', buyPrice: 160, requiredRealm: '炼气五层' },
   { itemId: 'item_julingcao', buyPrice: 30 },
+  { itemId: 'item_fabao_material_lingwen', buyPrice: 35 },
+  { itemId: 'item_fabao_blueprint_attack_lower', buyPrice: 300, requiredRealm: '炼气一层' },
+  { itemId: 'item_fabao_blueprint_defense_lower', buyPrice: 300, requiredRealm: '炼气一层' },
 ]
 
 const listingMap = new Map(MARKET_LISTINGS.map((listing) => [listing.itemId, listing]))

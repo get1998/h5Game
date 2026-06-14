@@ -18,11 +18,18 @@ export interface BattleLogEntry {
   timestamp: number
 }
 
+/** 洞府闭关模式 */
+export type IdleMode = 'xiuwei' | 'gongfa'
+
 /** 挂机状态 */
 export interface IdleState {
   isRunning: boolean
+  /** 闭关模式：修为修炼 / 功法修炼 */
+  mode: IdleMode
   lastTickAt: number
   accumulatedSeconds: number
   /** 未结算的小数修为（跨 tick 累积，避免每秒取整丢进度） */
   xiuweiRemainder: number
+  /** 未结算的小数功法经验 */
+  gongfaExpRemainder: number
 }

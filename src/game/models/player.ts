@@ -56,8 +56,6 @@ export interface CombatStats {
 export interface SpecialStats {
   /** 悟性，影响功法修炼效率 */
   comprehension: number
-  /** 丹毒累积值，过高会影响服药效果 */
-  pillPoison: number
   /** 因果值，影响奇遇与劫难触发 */
   karma: number
 }
@@ -210,7 +208,6 @@ export function createDefaultPlayer(name = '无名修士'): Player {
     },
     special: {
       comprehension: 10,
-      pillPoison: 0,
       karma: 0,
     },
   }

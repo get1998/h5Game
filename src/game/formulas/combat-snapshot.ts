@@ -23,8 +23,10 @@ export interface CombatSnapshot {
   tenacity: number
   /** 受击减伤（小数） */
   damageReduction: number
-  /** 受击时的防御五行（灵根主属性 → 功法主五行） */
+  /** 受击时的防御五行（主修功法主五行） */
   defenseElement: ElementType
   /** 默认攻击五行（技能无显式属性时的 fallback，普攻不参与五行克制） */
   primaryAttackElement: ElementType
+  /** 受击免疫五行被克（五行汇总功法） */
+  immuneToElementCounter: boolean
 }

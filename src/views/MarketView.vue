@@ -8,6 +8,7 @@ import {
   canBuyFromMarket,
   canBuySpecialFromMarket,
   canSellToMarket,
+  summarizeSellableInventory,
 } from '@/game/systems/market'
 import { listInventoryEntries } from '@/game/systems/inventory'
 import { useDongfuStore } from '@/stores/dongfu'
@@ -43,7 +44,8 @@ const tabItems = computed(() => [
   },
 ])
 
-const lingshiText = computed(() => String(playerStore.inventory.lingshi))
+const lingshiText = computed(() => String(playerStore.totalLingshi))
+const lingshiItems = computed(() => playerStore.lingshiDisplayItems)
 
 onMounted(() => {
   playerStore.refreshMarketTreasures()
@@ -108,8 +110,12 @@ const marketItems = computed(() =>
 const inventoryItems = computed(() =>
   listInventoryEntries(playerStore.inventory).map((entry) => {
     const sellCheck = canSellToMarket(playerStore.inventory, entry.itemId)
+    const sellAllCheck = canSellToMarket(
+      playerStore.inventory,
+      entry.itemId,
+      entry.count,
+    )
     const qualityColor = ITEM_QUALITY_COLOR[entry.definition.quality]
-    const isConsumable = entry.definition.category === 'consumable'
 
     return {
       itemId: entry.itemId,
@@ -119,13 +125,23 @@ const inventoryItems = computed(() =>
       qualityStyle: `color: ${qualityColor}`,
       count: entry.count,
       sellPrice: entry.definition.sellPrice,
+      totalSellPrice: entry.definition.sellPrice * entry.count,
       canSell: sellCheck.ok && !isLocked.value,
-      canUse: isConsumable && !isLocked.value,
+      canSellAll: sellAllCheck.ok && entry.count > 1 && !isLocked.value,
       sellDisabledReason: sellCheck.reason,
+      sellAllDisabledReason: sellAllCheck.reason,
       itemClass: 'inventory-item game-card',
     }
   }),
 )
+
+const sellableBatchSummary = computed(() => {
+  const summary = summarizeSellableInventory(playerStore.inventory)
+  return {
+    ...summary,
+    canBatch: summary.itemKinds > 0 && !isLocked.value,
+  }
+})
 
 const inventoryEmpty = computed(() => inventoryItems.value.length === 0)
 
@@ -160,14 +176,15 @@ function handleSell(itemId: string) {
   showToast(result.message)
 }
 
-function handleUse(itemId: string) {
+function handleSellAll(itemId: string) {
   if (isLocked.value) return
-  const result = playerStore.useItem(itemId)
-  if (result.success) {
-    const autoResult = gameStore.tryAutoMinorBreakthrough()
-    showToast(autoResult.attempted ? autoResult.message : result.message)
-    return
-  }
+  const result = playerStore.sellAllInventoryItem(itemId)
+  showToast(result.message)
+}
+
+function handleSellAllSellable() {
+  if (isLocked.value) return
+  const result = playerStore.sellAllSellableInventoryItems()
   showToast(result.message)
 }
 </script>
@@ -177,6 +194,14 @@ function handleUse(itemId: string) {
     <header class="page-header">
       <h1 class="game-title">坊市</h1>
       <p class="page-subtitle">灵石 {{ lingshiText }}</p>
+      <div v-if="lingshiItems.length > 0" class="lingshi-breakdown">
+        <span
+          v-for="item in lingshiItems"
+          :key="item.element"
+          class="lingshi-breakdown__tag"
+          :style="item.tagStyle"
+        >{{ item.element }} {{ item.amount }}</span>
+      </div>
     </header>
 
     <nav class="market-tabs">
@@ -250,7 +275,20 @@ function handleUse(itemId: string) {
     </section>
 
     <section v-else class="inventory-section">
-      <p v-if="inventoryEmpty" class="inventory-empty">背包空空如也，历练可获材料与丹药。</p>
+      <div v-if="sellableBatchSummary.itemKinds > 0" class="inventory-batch">
+        <p class="inventory-batch__hint">
+          可售 {{ sellableBatchSummary.itemKinds }} 种共 {{ sellableBatchSummary.soldCount }} 件，预计获得 {{ sellableBatchSummary.totalGain }} 灵石
+        </p>
+        <button
+          type="button"
+          class="inventory-batch__action game-btn game-btn--primary"
+          :disabled="!sellableBatchSummary.canBatch"
+          @click="handleSellAllSellable"
+        >
+          一键出售
+        </button>
+      </div>
+      <p v-if="inventoryEmpty" class="inventory-empty">背包空空如也，历练可获材料。</p>
       <div
         v-for="item in inventoryItems"
         :key="item.itemId"
@@ -262,17 +300,11 @@ function handleUse(itemId: string) {
         </div>
         <p class="inventory-item__desc">{{ item.description }}</p>
         <div class="inventory-item__footer">
-          <span v-if="item.sellPrice > 0" class="inventory-item__price">出售价 {{ item.sellPrice }}</span>
+          <span v-if="item.sellPrice > 0" class="inventory-item__price">
+            出售价 {{ item.sellPrice }}
+            <template v-if="item.count > 1">（全部 {{ item.totalSellPrice }}）</template>
+          </span>
           <div class="inventory-item__actions">
-            <button
-              v-if="item.canUse"
-              type="button"
-              class="inventory-item__action game-btn game-btn--primary"
-              :disabled="isLocked"
-              @click="handleUse(item.itemId)"
-            >
-              使用
-            </button>
             <button
               v-if="item.sellPrice > 0"
               type="button"
@@ -282,6 +314,16 @@ function handleUse(itemId: string) {
               @click="handleSell(item.itemId)"
             >
               出售
+            </button>
+            <button
+              v-if="item.sellPrice > 0 && item.count > 1"
+              type="button"
+              class="inventory-item__action inventory-item__action--all game-btn game-btn--primary"
+              :disabled="!item.canSellAll"
+              :title="item.sellAllDisabledReason"
+              @click="handleSellAll(item.itemId)"
+            >
+              全部出售
             </button>
           </div>
         </div>
@@ -301,6 +343,23 @@ function handleUse(itemId: string) {
   margin-top: 4px;
   font-size: 13px;
   color: $color-text-muted;
+}
+
+.lingshi-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.lingshi-breakdown__tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.lingshi-breakdown__tag + .lingshi-breakdown__tag {
+  margin-left: 6px;
 }
 
 .market-tabs {
@@ -461,5 +520,41 @@ function handleUse(itemId: string) {
   font-size: 13px;
   text-align: center;
   color: $color-text-muted;
+}
+
+.inventory-batch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: rgba($color-primary, 0.06);
+  border: 1px solid rgba($color-primary, 0.2);
+  border-radius: $radius-sm;
+}
+
+.inventory-batch__hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: $color-text-muted;
+}
+
+.inventory-batch__action {
+  margin-top: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inventory-batch__hint + .inventory-batch__action {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+.inventory-batch__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 </style>

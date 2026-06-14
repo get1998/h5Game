@@ -4,6 +4,8 @@ export interface AchievementCounters {
   battleWins: number
   /** 境界突破次数 */
   breakthroughs: number
+  /** 历练中逃跑失败次数 */
+  fleeFailures: number
 }
 
 /** 单条成就进度 */
@@ -12,6 +14,8 @@ export interface AchievementRecord {
   unlockedAtDay: number | null
   /** 当前进度值（用于可累计类成就展示） */
   progress: number
+  /** 升级类成就当前等级（0 表示尚未激活） */
+  level?: number
 }
 
 /** 玩家成就存档 */
@@ -27,6 +31,7 @@ export function createDefaultAchievementState(): AchievementState {
     counters: {
       battleWins: 0,
       breakthroughs: 0,
+      fleeFailures: 0,
     },
   }
 }

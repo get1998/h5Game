@@ -2,6 +2,20 @@
  * 计算最终伤害（文档 8.1 简化版）
  * 最终伤害 = 攻击力 × 技能倍率 × (暴击？暴击伤害 : 1) × 随机波动(0.9~1.1) - 目标防御 × (1 - 穿透/100)
  */
+import {
+  FLEE_BASE_SUCCESS_RATE,
+  FLEE_MAX_SUCCESS_RATE,
+  FLEE_MIN_SUCCESS_RATE,
+  FLEE_SPEED_FACTOR,
+} from '@/game/constants/combat-balance'
+
+export {
+  FLEE_BASE_SUCCESS_RATE,
+  FLEE_MAX_SUCCESS_RATE,
+  FLEE_MIN_SUCCESS_RATE,
+  FLEE_SPEED_FACTOR,
+}
+
 export interface DamageInput {
   attack: number
   skillMultiplier?: number
@@ -59,4 +73,20 @@ export function calcHitRate(
 
 export function rollHit(hitRate: number): boolean {
   return Math.random() < hitRate
+}
+
+/**
+ * 计算逃跑成功率
+ * 逃跑率 = 基础成功率 + (玩家速度 - 敌方速度) × 速度系数，限制在 10%~95%
+ */
+export function calcFleeRate(playerSpeed: number, monsterSpeed: number): number {
+  const rate = FLEE_BASE_SUCCESS_RATE + (playerSpeed - monsterSpeed) * FLEE_SPEED_FACTOR
+  return Math.min(FLEE_MAX_SUCCESS_RATE, Math.max(FLEE_MIN_SUCCESS_RATE, rate))
+}
+
+/**
+ * 判定是否逃跑成功
+ */
+export function rollFlee(fleeRate: number): boolean {
+  return Math.random() < fleeRate
 }

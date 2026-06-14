@@ -412,6 +412,33 @@ export function getSkillProficiency(
   return proficiencyMap?.[skillId] ?? 0
 }
 
+/**
+ * 读取指定功法品质下技能熟练度上限（圆满门槛）
+ */
+export function getSkillProficiencyCap(quality: GongfaQuality): number {
+  return getSkillProficiencyThreshold('圆满', quality)
+}
+
+/**
+ * 技能熟练度是否已达圆满
+ */
+export function isSkillProficiencyMaxed(proficiency: number, quality: GongfaQuality): boolean {
+  return proficiency >= getSkillProficiencyCap(quality)
+}
+
+/**
+ * 计算实际可增加的熟练度（圆满后不再增加，未圆满时不超过上限）
+ */
+export function calcEffectiveSkillProficiencyGain(
+  currentProficiency: number,
+  gain: number,
+  quality: GongfaQuality,
+): number {
+  if (gain <= 0 || isSkillProficiencyMaxed(currentProficiency, quality)) return 0
+  const cap = getSkillProficiencyCap(quality)
+  return Math.min(gain, cap - currentProficiency)
+}
+
 /** 技能熟练度进度展示数据 */
 export interface SkillProficiencyProgress {
   level: SkillLevel

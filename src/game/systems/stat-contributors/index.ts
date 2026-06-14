@@ -23,6 +23,7 @@ export {
   PASSIVE_STAT_CONTRIBUTOR_ID,
   passiveStatContributor,
   aggregatePermanentPassiveContributions,
+  aggregateSkillMasteryPassiveContributions,
   extractPassiveSkillContribution,
   getUnlockedPassiveSkills,
 } from '@/game/systems/stat-contributors/passive-contributor'
@@ -34,9 +35,20 @@ export {
 } from '@/game/systems/stat-contributors/title-contributor'
 
 export {
+  ACHIEVEMENT_STAT_CONTRIBUTOR_ID,
+  achievementStatContributor,
+  getAchievementCombatContribution,
+} from '@/game/systems/stat-contributors/achievement-contributor'
+
+export {
   REINCARNATION_STAT_CONTRIBUTOR_ID,
   reincarnationStatContributor,
 } from '@/game/systems/stat-contributors/reincarnation-contributor'
+
+export {
+  FABAO_STAT_CONTRIBUTOR_ID,
+  fabaoStatContributor,
+} from '@/game/systems/stat-contributors/fabao-contributor'
 
 export {
   buildEffectiveCombatStats,

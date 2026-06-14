@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { BattleLogEntry, IdleState } from '@/game/types'
+import type { BattleLogEntry, IdleMode, IdleState } from '@/game/types'
 import {
   calcCultivationRate,
   calcIdleXiuwei,
@@ -7,10 +7,20 @@ import {
   tryBreakthrough,
   type BreakthroughAttemptResult,
 } from '@/game/systems/cultivation'
-import { calcLingqiRecoveryPerSec } from '@/game/systems/lingqi'
+import { calcIdleGongfaExp } from '@/game/systems/gongfa-cultivation'
 import {
+  calcLingqiRecoveryPerSec,
+  canZhenfaSustainCultivation,
+  getCultivationLingqiStopMessage,
+  isDongfuLingqiFull,
+} from '@/game/systems/lingqi'
+import { canAffordZhenfaMaintainInterval } from '@/game/systems/zhenfa-maintain'
+import {
+  buildEffectiveCombatStats,
   buildRestingMessage,
   buildSevereInjuryMessage,
+  calcMonsterCombatPower,
+  calcPlayerCombatPower,
   calcRestDurationMs,
   calcSevereInjuryDurationMs,
   MAX_CONSECUTIVE_REST_COUNT,
@@ -22,6 +32,7 @@ import {
   runBattleRound,
   SEVERE_INJURY_LIFESPAN_PENALTY_YEARS,
   shouldApplyRestLifespanPenalty,
+  shouldForceFleeByCombatPower,
   type BattleMonsterSkillState,
   type BattleRoundResult,
   type BattleSkillState,
@@ -46,11 +57,15 @@ import {
 import { calcBattleLingshiReward } from '@/game/formulas/battle-lingshi'
 import { getItemDefinition } from '@/game/constants/items'
 import { rollDongfuTreasureDrop } from '@/game/systems/dongfu-treasure-loot'
+import { rollZhenfaBlueprintDrop, rollZhenfaTreasureDrop } from '@/game/systems/zhenfa-loot'
 import type { Gongfa } from '@/game/models/gongfa'
 import { usePlayerStore } from '@/stores/player'
 import { useDongfuStore } from '@/stores/dongfu'
 
 const IDLE_TICK_MS = 1000
+
+/** 洞府自动修炼：手动停止后需等灵气消耗再蓄满 */
+type DongfuAutoIdleGate = 'normal' | 'manual_stop_wait_deplete' | 'manual_stop_refilling'
 
 /**
  * 挂机、战斗与日志状态
@@ -76,6 +91,14 @@ export const useGameStore = defineStore('game', {
     battleSkillState: null as BattleSkillState | null,
     battleMonsterSkillState: null as BattleMonsterSkillState | null,
     battlePlayerDebuffs: null as PlayerBattleDebuffs | null,
+    /** 是否在洞府页（仅洞府页触发自动修炼） */
+    dongfuPageActive: false,
+    /** 洞府页当前选择的修炼模式 */
+    dongfuPreferredIdleMode: 'xiuwei' as IdleMode,
+    /** 手动停止修炼后的自动开练门禁 */
+    dongfuAutoIdleGate: 'normal' as DongfuAutoIdleGate,
+    /** 手动停止时对应的修炼模式（仅阻止该模式自动开练） */
+    dongfuAutoIdleBlockedMode: null as IdleMode | null,
   }),
   getters: {
     /** 调息或重伤期间锁定全页操作 */
@@ -107,7 +130,7 @@ export const useGameStore = defineStore('game', {
     },
     exploreStatusText(state): string {
       if (state.recoveryPhase === 'resting') {
-        return `调息中 · 第 ${state.consecutiveDefeatCount} 次`
+        return `战败调息中 · 连续第 ${state.consecutiveDefeatCount} 次`
       }
       if (state.recoveryPhase === 'severe_injury') {
         return '重伤昏迷'
@@ -140,6 +163,7 @@ export const useGameStore = defineStore('game', {
       const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
 
+      this.dongfuPreferredIdleMode = dongfuStore.idle.mode
       this.clearIdleTimer()
       const now = Date.now()
       dongfuStore.syncIdleState({
@@ -172,17 +196,119 @@ export const useGameStore = defineStore('game', {
       }
     },
 
+    /** 标记是否在洞府页（控制自动修炼触发范围） */
+    setDongfuPageActive(active: boolean) {
+      this.dongfuPageActive = active
+    },
+
+    /** 同步洞府页选择的修炼模式 */
+    setDongfuPreferredIdleMode(mode: IdleMode) {
+      this.dongfuPreferredIdleMode = mode
+    },
+
+    /** 手动停止的门禁是否阻止指定模式自动开练 */
+    isDongfuAutoIdleGateBlocking(mode: IdleMode): boolean {
+      if (this.dongfuAutoIdleGate === 'normal') return false
+      return mode === this.dongfuAutoIdleBlockedMode
+    },
+
+    /** 推进手动停止后的门禁状态（仅对曾被手动停止的模式生效） */
+    advanceDongfuAutoIdleGate(mode: IdleMode, lingqiFull: boolean): boolean {
+      if (!this.isDongfuAutoIdleGateBlocking(mode)) return false
+
+      if (this.dongfuAutoIdleGate === 'manual_stop_wait_deplete') {
+        if (lingqiFull) return true
+        this.dongfuAutoIdleGate = 'manual_stop_refilling'
+        return true
+      }
+
+      if (this.dongfuAutoIdleGate === 'manual_stop_refilling') {
+        if (!lingqiFull) return true
+        this.dongfuAutoIdleGate = 'normal'
+        this.dongfuAutoIdleBlockedMode = null
+      }
+
+      return false
+    },
+
+    /** 检测指定模式是否满足自动开练前置条件 */
+    canAutoStartDongfuIdleMode(mode: IdleMode): boolean {
+      const playerStore = usePlayerStore()
+      if (mode === 'xiuwei') {
+        return !isRealmXiuweiFull(playerStore.player)
+      }
+
+      const activeGongfa = playerStore.activeGongfa
+      return !!activeGongfa && activeGongfa.level < activeGongfa.maxLevel
+    },
+
+    /**
+     * 洞府页自动开始修炼：
+     * - 灵气已满时开练
+     * - 聚灵阵可维持时，灵气枯竭后也会自动续练（无需等蓄满）
+     * - 手动停止后需等灵气消耗并再次蓄满
+     */
+    tryAutoStartDongfuCultivation(mode?: IdleMode): boolean {
+      if (!this.dongfuPageActive || this.isRecoveryLocked || this.idle.isRunning) {
+        return false
+      }
+
+      const idleMode = mode ?? this.dongfuPreferredIdleMode
+
+      const playerStore = usePlayerStore()
+      const dongfuStore = useDongfuStore()
+      const dongfu = dongfuStore.dongfu
+      const full = isDongfuLingqiFull(dongfu)
+      const zhenfaSustain = canZhenfaSustainCultivation(dongfu, playerStore.inventory)
+
+      if (this.advanceDongfuAutoIdleGate(idleMode, full)) {
+        return false
+      }
+
+      if (!this.canAutoStartDongfuIdleMode(idleMode)) return false
+
+      const canStartByLingqi = full || (dongfu.lingqi <= 0 && zhenfaSustain)
+      if (!canStartByLingqi) return false
+
+      this.startIdle(idleMode)
+      if (!this.idle.isRunning) return false
+
+      if (full) {
+        this.lastMessage = idleMode === 'gongfa'
+          ? '灵气已满，自动开始功法修炼。'
+          : '灵气已满，自动开始修炼。'
+      } else {
+        this.lastMessage = idleMode === 'gongfa'
+          ? '聚灵阵运转中，自动继续功法修炼。'
+          : '聚灵阵运转中，自动继续修炼。'
+      }
+      return true
+    },
+
     /** 开始修炼 */
-    startIdle() {
+    startIdle(mode: IdleMode = 'xiuwei') {
       if (this.isRecoveryLocked) return
 
       const playerStore = usePlayerStore()
       const dongfuStore = useDongfuStore()
       if (dongfuStore.idle.isRunning) return
 
-      if (isRealmXiuweiFull(playerStore.player)) {
-        this.lastMessage = '当前境界修为已满，请先突破后再修炼。'
-        return
+      const activeGongfa = playerStore.activeGongfa
+
+      if (mode === 'xiuwei') {
+        if (isRealmXiuweiFull(playerStore.player)) {
+          this.lastMessage = '当前境界修为已满，请先突破后再修炼。'
+          return
+        }
+      } else {
+        if (!activeGongfa) {
+          this.lastMessage = '请先装备主修功法后再进行功法修炼。'
+          return
+        }
+        if (activeGongfa.level >= activeGongfa.maxLevel) {
+          this.lastMessage = `${activeGongfa.name} 已圆满，无法继续功法修炼。`
+          return
+        }
       }
 
       if (this.isAutoExploring) {
@@ -190,9 +316,20 @@ export const useGameStore = defineStore('game', {
       }
 
       if (dongfuStore.dongfu.lingqi <= 0) {
-        const recovery = calcLingqiRecoveryPerSec(dongfuStore.dongfu, true)
+        const recovery = calcLingqiRecoveryPerSec(
+          dongfuStore.dongfu,
+          true,
+          playerStore.inventory,
+        )
         if (recovery <= 0) {
-          this.lastMessage = '灵气枯竭，需等待恢复或布置聚灵阵后方可修炼。'
+          if (
+            dongfuStore.dongfu.zhenfaLevel > 0
+            && !canAffordZhenfaMaintainInterval(playerStore.inventory, dongfuStore.dongfu.zhenfaLevel)
+          ) {
+            this.lastMessage = '阵法灵石不足，无法维持聚灵，请补充五行灵石后再修炼。'
+          } else {
+            this.lastMessage = '灵气枯竭，需等待恢复或布置聚灵阵后方可修炼。'
+          }
           return
         }
       }
@@ -201,10 +338,15 @@ export const useGameStore = defineStore('game', {
       dongfuStore.syncIdleState({
         ...dongfuStore.idle,
         isRunning: true,
+        mode,
         lastTickAt: now,
+        xiuweiRemainder: mode === 'xiuwei' ? dongfuStore.idle.xiuweiRemainder : 0,
+        gongfaExpRemainder: mode === 'gongfa' ? dongfuStore.idle.gongfaExpRemainder : 0,
       })
       this.tickTimer = setInterval(() => this.tickIdle(), IDLE_TICK_MS)
-      this.lastMessage = '开始修炼，吸纳天地灵气。'
+      this.lastMessage = mode === 'gongfa'
+        ? `开始功法修炼，参悟「${activeGongfa!.name}」。`
+        : '开始修炼，吸纳天地灵气。'
     },
 
     /** 停止修炼 */
@@ -218,14 +360,30 @@ export const useGameStore = defineStore('game', {
         ...dongfuStore.idle,
         isRunning: false,
       })
+      this.dongfuAutoIdleGate = isDongfuLingqiFull(dongfuStore.dongfu)
+        ? 'manual_stop_wait_deplete'
+        : 'manual_stop_refilling'
+      this.dongfuAutoIdleBlockedMode = dongfuStore.idle.mode
       this.lastMessage = message ?? '结束修炼。'
     },
 
-    /** 结算自上次 tick 以来的修炼修为（在线/离线统一逻辑） */
+    /** 结算自上次 tick 以来的闭关收益（在线/离线统一逻辑） */
     applyCultivationElapsed() {
-      const playerStore = usePlayerStore()
       const dongfuStore = useDongfuStore()
       if (!dongfuStore.idle.isRunning) return
+
+      if (dongfuStore.idle.mode === 'gongfa') {
+        this.applyGongfaCultivationElapsed()
+      } else {
+        this.applyXiuweiCultivationElapsed()
+      }
+    },
+
+    /** 结算修为修炼 */
+    applyXiuweiCultivationElapsed() {
+      const playerStore = usePlayerStore()
+      const dongfuStore = useDongfuStore()
+      if (!dongfuStore.idle.isRunning || dongfuStore.idle.mode !== 'xiuwei') return
 
       const now = Date.now()
       const elapsed = Math.floor((now - dongfuStore.idle.lastTickAt) / 1000)
@@ -239,6 +397,7 @@ export const useGameStore = defineStore('game', {
         dongfuStore.idle.xiuweiRemainder,
         now,
         playerStore.reincarnation.cultivation,
+        playerStore.inventory,
       )
 
       dongfuStore.syncDongfu(result.dongfu)
@@ -251,8 +410,6 @@ export const useGameStore = defineStore('game', {
 
       if (result.gainedXiuwei > 0) {
         playerStore.addXiuwei(result.gainedXiuwei)
-      } else if (dongfuStore.dongfu.lingqi <= 0 && !isRealmXiuweiFull(playerStore.player)) {
-        this.lastMessage = '灵气枯竭，修炼暂无收益。恢复灵气或升级阵法后可继续。'
       }
 
       if (isRealmXiuweiFull(playerStore.player)) {
@@ -266,6 +423,79 @@ export const useGameStore = defineStore('game', {
         } else if (autoResult.attempted && wasCultivating) {
           this.lastMessage = `${autoResult.message} 修炼已自动停止。`
         }
+        return
+      }
+
+      const stopMessage = getCultivationLingqiStopMessage(
+        dongfuStore.dongfu,
+        playerStore.inventory,
+        result.zhenfaSuspended,
+        'xiuwei',
+      )
+      if (stopMessage) {
+        this.finishIdle(stopMessage)
+      }
+    },
+
+    /** 结算功法修炼 */
+    applyGongfaCultivationElapsed() {
+      const playerStore = usePlayerStore()
+      const dongfuStore = useDongfuStore()
+      if (!dongfuStore.idle.isRunning || dongfuStore.idle.mode !== 'gongfa') return
+
+      const activeGongfa = playerStore.activeGongfa
+      if (!activeGongfa) {
+        this.finishIdle('请先装备主修功法后再进行功法修炼。')
+        return
+      }
+      if (activeGongfa.level >= activeGongfa.maxLevel) {
+        this.finishIdle('功法已圆满，修炼自动停止。')
+        return
+      }
+
+      const now = Date.now()
+      const elapsed = Math.floor((now - dongfuStore.idle.lastTickAt) / 1000)
+      if (elapsed <= 0) return
+
+      const result = calcIdleGongfaExp(
+        playerStore.player,
+        dongfuStore.dongfu,
+        activeGongfa,
+        elapsed,
+        dongfuStore.idle.gongfaExpRemainder,
+        now,
+        playerStore.inventory,
+      )
+
+      dongfuStore.syncDongfu(result.dongfu)
+      dongfuStore.syncIdleState({
+        ...dongfuStore.idle,
+        lastTickAt: now,
+        accumulatedSeconds: dongfuStore.idle.accumulatedSeconds + result.seconds,
+        gongfaExpRemainder: result.gongfaExpRemainder,
+      })
+
+      if (result.gainedExp > 0) {
+        const levelResult = playerStore.gainGongfaExp(activeGongfa.id, result.gainedExp)
+        if (levelResult?.leveledUp) {
+          this.lastMessage = levelResult.message
+        }
+      }
+
+      const currentGongfa = playerStore.activeGongfa
+      if (!currentGongfa || currentGongfa.level >= currentGongfa.maxLevel) {
+        this.finishIdle('功法已圆满，修炼自动停止。')
+        return
+      }
+
+      const stopMessage = getCultivationLingqiStopMessage(
+        dongfuStore.dongfu,
+        playerStore.inventory,
+        result.zhenfaSuspended,
+        'gongfa',
+      )
+      if (stopMessage) {
+        this.finishIdle(stopMessage)
       }
     },
 
@@ -342,7 +572,7 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * 战败后自动调息
+     * 战败后自动调息（仅气血归零的连续战败计入次数；逃跑、离开地图不计）
      * 时长 = 5 秒 × 连续战败次数；连续 5 次后陷入重伤 3 分钟
      */
     startRecoveryAfterDefeat() {
@@ -350,6 +580,10 @@ export const useGameStore = defineStore('game', {
       this.isBattling = false
       this.clearBattleTimers()
       this.clearRecoveryTimers()
+      this.currentMonster = null
+      this.battleSkillState = null
+      this.battleMonsterSkillState = null
+      this.battlePlayerDebuffs = null
 
       this.consecutiveDefeatCount += 1
       const restCount = this.consecutiveDefeatCount
@@ -361,14 +595,14 @@ export const useGameStore = defineStore('game', {
       this.recoveryEndsAt = Date.now() + durationMs
       this.lastMessage = buildRestingMessage(restCount)
       this.pushSystemLog(
-        `开始第 ${restCount} 次调息，需 ${durationMs / 1000} 秒恢复气血。`,
+        `连续第 ${restCount} 次战败调息，需 ${durationMs / 1000} 秒恢复气血。`,
       )
 
       if (shouldApplyRestLifespanPenalty(restCount)) {
         const playerStore = usePlayerStore()
         const penalty = playerStore.reduceLifespan(REST_LIFESPAN_PENALTY_YEARS)
         this.pushSystemLog(
-          `连续调息 ${restCount} 次，寿元削减 ${REST_LIFESPAN_PENALTY_YEARS} 年。`,
+          `连续战败调息 ${restCount} 次，寿元削减 ${REST_LIFESPAN_PENALTY_YEARS} 年。`,
         )
         if (penalty.lifespanEnded) {
           this.clearRecoveryTimers()
@@ -495,14 +729,25 @@ export const useGameStore = defineStore('game', {
       this.encounterMonster()
     },
 
-    /** 结束自动历练 */
-    stopAutoExplore() {
+    /** 结束自动历练（主动离开地图：不计连续战败，并重置连续战败计数） */
+    stopAutoExplore(message = '结束历练，返回休整。') {
       if (this.isRecoveryLocked) return
+
+      const wasActive = this.isAutoExploring || this.isBattling
 
       this.isAutoExploring = false
       this.isBattling = false
       this.clearBattleTimers()
-      this.lastMessage = '结束历练，返回休整。'
+      this.currentMonster = null
+      this.battleSkillState = null
+      this.battleMonsterSkillState = null
+      this.battlePlayerDebuffs = null
+
+      if (wasActive) {
+        this.consecutiveDefeatCount = 0
+      }
+
+      this.lastMessage = message
     },
 
     /** 清理战斗相关定时器 */
@@ -525,9 +770,32 @@ export const useGameStore = defineStore('game', {
       const playerStore = usePlayerStore()
       resetBattleLogCounter()
       const encounter = pickRandomMonster(map, playerStore.monsterTierPity)
-      this.currentMonster = encounter.monster
+      const monster = encounter.monster
       playerStore.monsterTierPity = encounter.pityState
       playerStore.save()
+
+      const gongfa = playerStore.activeGongfa
+      if (gongfa) {
+        const effective = playerStore.effectiveCombatStats
+        const { snapshot } = buildEffectiveCombatStats(playerStore.player, {
+          activeGongfa: gongfa,
+          gongfaList: playerStore.gongfaList,
+          fabaoState: playerStore.fabao,
+        })
+        const playerPower = calcPlayerCombatPower(
+          snapshot,
+          effective.combat.maxHp,
+          effective.combat.maxMp,
+        )
+        if (shouldForceFleeByCombatPower(playerPower, calcMonsterCombatPower(monster))) {
+          this.pushSystemLog(`在 ${map.name} 察觉 ${monster.name} 气势远胜自身，未战先撤。`)
+          this.lastMessage = '强敌当前，暂避锋芒，继续历练。'
+          this.scheduleNextEncounter()
+          return
+        }
+      }
+
+      this.currentMonster = monster
       playerStore.restoreFullResources()
       this.battleSkillState = resetBattleSkillState(playerStore.effectiveCombatStats.combat.maxMp)
       this.battleMonsterSkillState = resetBattleMonsterSkillState(this.currentMonster.combat.maxMp)
@@ -600,8 +868,8 @@ export const useGameStore = defineStore('game', {
           this.currentMonster.tier,
         )
         if (lingshiGain > 0) {
-          playerStore.gainLingshi(lingshiGain)
-          const text = `获得灵石 ${lingshiGain} 枚`
+          playerStore.gainLingshi(lingshiGain, this.currentMonster.element)
+          const text = `获得${this.currentMonster.element}系灵石 ${lingshiGain} 枚`
           messages.push(text)
           this.pushSystemLog(text)
         }
@@ -634,11 +902,40 @@ export const useGameStore = defineStore('game', {
       }
 
       const dongfuLevel = useDongfuStore().dongfu.level
+      const dongfuState = useDongfuStore().dongfu
       const treasureDrop = rollDongfuTreasureDrop(this.currentMonster!, dongfuLevel)
       if (treasureDrop) {
         const gain = playerStore.gainItem(treasureDrop.itemId, 1)
         if (gain.added > 0) {
           const text = `获得洞府宝物「${treasureDrop.itemName}」！`
+          messages.push(text)
+          this.pushSystemLog(text)
+        }
+      }
+
+      const blueprintDrop = rollZhenfaBlueprintDrop(
+        this.currentMonster!,
+        dongfuLevel,
+        dongfuState.zhenfaUnlockedMaxLevel,
+      )
+      if (blueprintDrop) {
+        const gain = playerStore.gainItem(blueprintDrop.itemId, 1)
+        if (gain.added > 0) {
+          const text = `获得阵法图纸「${blueprintDrop.itemName}」！`
+          messages.push(text)
+          this.pushSystemLog(text)
+        }
+      }
+
+      const zhenfaTreasureDrop = rollZhenfaTreasureDrop(
+        this.currentMonster!,
+        dongfuLevel,
+        dongfuState.zhenfaLevel,
+      )
+      if (zhenfaTreasureDrop) {
+        const gain = playerStore.gainItem(zhenfaTreasureDrop.itemId, 1)
+        if (gain.added > 0) {
+          const text = `获得阵法宝物「${zhenfaTreasureDrop.itemName}」！`
           messages.push(text)
           this.pushSystemLog(text)
         }
@@ -668,19 +965,36 @@ export const useGameStore = defineStore('game', {
         gongfa,
         this.battleSkillState,
         playerStore.gongfaList,
+        playerStore.battleSkillLoadout,
         {
           monsterSkillState: this.battleMonsterSkillState,
           playerDebuffs: this.battlePlayerDebuffs,
+          equippedTitleId: playerStore.titles.equippedTitleId,
+          achievements: playerStore.achievements,
+          reincarnationCombat: playerStore.reincarnation.combat,
         },
+        playerStore.fabao,
       )
 
       playerStore.setHp(result.playerHp)
       playerStore.setMp(result.playerMp)
+      if (result.fabaoState) {
+        playerStore.syncFabaoState(result.fabaoState)
+      }
       this.currentMonster.combat.hp = result.monsterHp
+
+      if (result.fleeFailedCount && result.fleeFailedCount > 0) {
+        const levelUps = playerStore.recordFleeFailures(result.fleeFailedCount)
+        for (const levelUp of levelUps) {
+          const speedBonus = levelUp.newLevel * 5
+          this.pushSystemLog(
+            `成就升级：「${levelUp.name}」Lv.${levelUp.newLevel}（速度 +${speedBonus}%）`,
+          )
+        }
+      }
 
       if (result.skillProficiencyGains.length > 0) {
         const levelUps = playerStore.gainSkillProficiency(
-          gongfa.id,
           result.skillProficiencyGains,
         )
         for (const levelUp of levelUps) {
@@ -697,6 +1011,13 @@ export const useGameStore = defineStore('game', {
         if (result.playerWin) {
           this.consecutiveDefeatCount = 0
           victoryMessages = this.applyBattleVictoryRewards(result, gongfa)
+        } else if (result.playerFled) {
+          // 逃跑不计入连续战败，也不重置计数
+          this.currentMonster = null
+          this.battleSkillState = null
+          this.battleMonsterSkillState = null
+          this.battlePlayerDebuffs = null
+          this.lastMessage = '见势不妙，抽身撤离，继续历练。'
         }
       }
 
@@ -709,7 +1030,9 @@ export const useGameStore = defineStore('game', {
       if (result.isFinished) {
         if (result.playerWin && this.isAutoExploring) {
           this.scheduleNextEncounter()
-        } else if (!result.playerWin) {
+        } else if (result.playerFled && this.isAutoExploring) {
+          this.scheduleNextEncounter()
+        } else if (!result.playerWin && !result.playerFled) {
           this.startRecoveryAfterDefeat()
         }
       }
@@ -751,6 +1074,10 @@ export const useGameStore = defineStore('game', {
       this.isAutoExploring = false
       this.lastMessage = ''
       this.cultivationResumed = false
+      this.dongfuPageActive = false
+      this.dongfuPreferredIdleMode = 'xiuwei'
+      this.dongfuAutoIdleGate = 'normal'
+      this.dongfuAutoIdleBlockedMode = null
       this.battleSkillState = null
       this.battleMonsterSkillState = null
       this.battlePlayerDebuffs = null

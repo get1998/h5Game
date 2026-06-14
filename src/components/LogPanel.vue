@@ -2,19 +2,52 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { BattleLogEntry } from '@/game/types'
 
-const props = defineProps<{
+/** 日志面板 Tab 配置 */
+export interface LogPanelTab {
+  id: string
+  label: string
   logs: BattleLogEntry[]
+}
+
+const props = defineProps<{
+  logs?: BattleLogEntry[]
   title?: string
+  tabs?: LogPanelTab[]
+  defaultTab?: string
 }>()
 
 const listRef = ref<HTMLElement | null>(null)
+const activeTabId = ref(props.defaultTab ?? props.tabs?.[0]?.id ?? '')
+
+/** 当前 Tab 下的日志列表（无 Tab 时使用 props.logs） */
+const activeLogs = computed(() => {
+  if (props.tabs?.length) {
+    const tab = props.tabs.find((item) => item.id === activeTabId.value)
+    return tab?.logs ?? []
+  }
+  return props.logs ?? []
+})
+
+const tabItems = computed(() =>
+  (props.tabs ?? []).map((tab) => ({
+    ...tab,
+    tabClass: activeTabId.value === tab.id
+      ? 'log-panel__tab log-panel__tab--active'
+      : 'log-panel__tab',
+  })),
+)
 
 const displayLogs = computed(() =>
-  props.logs.map((log) => ({
+  activeLogs.value.map((log) => ({
     ...log,
     logClass: `log-panel__item log-panel__item--${log.type}`,
   })),
 )
+
+/** 切换日志 Tab */
+function switchTab(tabId: string) {
+  activeTabId.value = tabId
+}
 
 /** 滚动日志列表到底部 */
 function scrollToBottom() {
@@ -27,9 +60,11 @@ function scrollToBottom() {
 }
 
 watch(
-  () => props.logs.length,
+  () => activeLogs.value.length,
   () => scrollToBottom(),
 )
+
+watch(activeTabId, () => scrollToBottom())
 
 onMounted(() => {
   scrollToBottom()
@@ -38,7 +73,18 @@ onMounted(() => {
 
 <template>
   <div class="log-panel game-card">
-    <div v-if="title" class="log-panel__title">{{ title }}</div>
+    <nav v-if="tabs?.length" class="log-panel__tabs">
+      <button
+        v-for="tab in tabItems"
+        :key="tab.id"
+        type="button"
+        :class="tab.tabClass"
+        @click="switchTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+    <div v-else-if="title" class="log-panel__title">{{ title }}</div>
     <div ref="listRef" class="log-panel__list">
       <div
         v-for="log in displayLogs"
@@ -61,6 +107,34 @@ onMounted(() => {
   font-family: $font-title;
   color: $color-primary;
   margin-bottom: 10px;
+}
+
+.log-panel__tabs {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.log-panel__tab {
+  flex: 1;
+  padding: 6px 0;
+  font-family: $font-title;
+  font-size: 14px;
+  color: $color-text-muted;
+  background: transparent;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.log-panel__tab + .log-panel__tab {
+  margin-left: 8px;
+}
+
+.log-panel__tab--active {
+  color: $color-primary;
+  border-color: $color-primary;
+  background: rgba($color-primary, 0.08);
 }
 
 .log-panel__list {

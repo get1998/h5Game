@@ -1,5 +1,7 @@
 import {
   ACHIEVEMENT_DEFINITIONS,
+  calcUpgradeAchievementLevel,
+  isUpgradeAchievement,
   type AchievementDefinition,
 } from '@/game/constants/achievements'
 import { isRealmAtLeast } from '@/game/constants/realm'
@@ -26,6 +28,15 @@ export interface AchievementUnlockResult {
   name: string
   description: string
   rewardTitleId?: string
+}
+
+/** 升级类成就升阶结果 */
+export interface AchievementLevelUpResult {
+  achievementId: string
+  name: string
+  description: string
+  oldLevel: number
+  newLevel: number
 }
 
 function isAchievementUnlocked(
@@ -87,6 +98,17 @@ export function calcAchievementProgress(
         satisfied: maxLevelCount >= target,
       }
     }
+    case 'flee_failures': {
+      const progress = state.counters.fleeFailures
+      const perLevel = definition.progressPerLevel ?? 1
+      const maxLevel = definition.maxLevel ?? 99
+      const level = calcUpgradeAchievementLevel(definition, progress)
+      return {
+        progress,
+        target: maxLevel * perLevel,
+        satisfied: level >= 1,
+      }
+    }
     default:
       return { progress: 0, target: 1, satisfied: false }
   }
@@ -107,6 +129,7 @@ export function checkAndUnlockAchievements(
   )
 
   for (const definition of ACHIEVEMENT_DEFINITIONS) {
+    if (isUpgradeAchievement(definition)) continue
     if (isAchievementUnlocked(state, definition.id)) continue
 
     const { progress, satisfied } = calcAchievementProgress(
@@ -161,4 +184,47 @@ export function unlockAchievementManually(
     description: definition.description,
     rewardTitleId: definition.rewardTitleId,
   }
+}
+
+/**
+ * 同步升级类成就等级，返回本次升阶列表
+ */
+export function syncUpgradeAchievements(
+  state: AchievementState,
+  context: AchievementCheckContext,
+): AchievementLevelUpResult[] {
+  const levelUps: AchievementLevelUpResult[] = []
+  const unlockedAtDay = calcWorldTotalDays(
+    context.worldTime.year,
+    context.worldTime.month,
+    context.worldTime.day,
+  )
+
+  for (const definition of ACHIEVEMENT_DEFINITIONS) {
+    if (!isUpgradeAchievement(definition)) continue
+
+    const { progress } = calcAchievementProgress(definition, state, context)
+    const newLevel = calcUpgradeAchievementLevel(definition, progress)
+    const record = getOrCreateRecord(state, definition.id)
+    const oldLevel = record.level ?? 0
+
+    record.progress = progress
+    record.level = newLevel
+
+    if (newLevel > 0 && record.unlockedAtDay == null) {
+      record.unlockedAtDay = unlockedAtDay
+    }
+
+    if (newLevel > oldLevel) {
+      levelUps.push({
+        achievementId: definition.id,
+        name: definition.name,
+        description: definition.description,
+        oldLevel,
+        newLevel,
+      })
+    }
+  }
+
+  return levelUps
 }

@@ -13,6 +13,7 @@ import {
 } from '@/game/models/skill'
 import { useGameStore } from '@/stores/game'
 import { usePlayerStore } from '@/stores/player'
+import { isWuxingSummaryGongfa } from '@/game/models/gongfa'
 import type { GongfaQuality } from '@/game/types'
 
 const SKILL_TYPE_LABEL: Record<string, string> = {
@@ -58,6 +59,8 @@ function mapSkillItem(
   }
 }
 
+const wuxingSummaryProgress = computed(() => playerStore.wuxingSummaryProgress)
+
 const gongfaItems = computed(() =>
   gongfaList.value.map((gongfa) => {
     const allSkills = getSkillsByGongfaId(gongfa.id)
@@ -67,9 +70,17 @@ const gongfaItems = computed(() =>
     const passiveSkills = allSkills
       .filter((skill) => isPermanentPassiveSkill(skill))
       .map((skill) => mapSkillItem(gongfa, skill))
+    const upgradeStatus = isWuxingSummaryGongfa(gongfa)
+      ? playerStore.getWuxingSummaryUpgradeStatus(gongfa.id)
+      : null
 
     return {
       ...gongfa,
+      isWuxingSummary: isWuxingSummaryGongfa(gongfa),
+      canUpgrade: upgradeStatus?.canUpgrade ?? false,
+      upgradeHint: upgradeStatus?.upgradeHint ?? '',
+      upgradeBlockReason: upgradeStatus?.blockReason ?? '',
+      showUpgradeSection: Boolean(upgradeStatus && gongfa.level >= gongfa.maxLevel),
       isActive: gongfa.id === playerStore.activeGongfaId,
       cardClass: gongfa.id === playerStore.activeGongfaId
         ? 'gongfa-item game-card gongfa-item--active'
@@ -106,6 +117,14 @@ const gongfaItems = computed(() =>
 function selectGongfa(gongfaId: string) {
   if (gameStore.isCultivationLocked) return
   playerStore.switchGongfa(gongfaId)
+}
+
+/**
+ * 五行汇总功法升品阶
+ */
+function handleUpgradeWuxingSummary(gongfaId: string) {
+  const result = playerStore.upgradeWuxingSummaryGongfa(gongfaId)
+  gameStore.lastMessage = result.message
 }
 
 /**
@@ -162,6 +181,24 @@ function togglePassiveSkills(gongfaId: string) {
         <div class="progress-bar__fill" :style="item.expBarStyle" />
       </div>
       <p class="gongfa-item__exp">功法经验 {{ item.expPercent }}%</p>
+
+      <p v-if="item.isWuxingSummary" class="gongfa-item__wuxing-tag">
+        五行汇总 · 受击免疫被克
+      </p>
+      <button
+        v-if="item.canUpgrade"
+        type="button"
+        class="gongfa-upgrade-btn"
+        @click.stop="handleUpgradeWuxingSummary(item.id)"
+      >
+        升品阶（{{ item.upgradeHint }}）
+      </button>
+      <p
+        v-else-if="item.showUpgradeSection && item.upgradeBlockReason"
+        class="gongfa-upgrade-hint"
+      >
+        {{ item.upgradeBlockReason }}
+      </p>
 
       <div
         v-if="item.passiveSkills.length"
@@ -447,5 +484,57 @@ function togglePassiveSkills(gongfaId: string) {
   margin-top: 10px;
   font-size: 12px;
   color: $color-primary-dim;
+}
+
+.wuxing-unlock {
+  margin-bottom: 12px;
+}
+
+.wuxing-unlock__title {
+  font-family: $font-title;
+  font-size: 15px;
+  color: $color-primary;
+  margin-bottom: 8px;
+}
+
+.wuxing-unlock__desc,
+.wuxing-unlock__step {
+  font-size: 12px;
+  color: $color-text-muted;
+  line-height: 1.5;
+}
+
+.wuxing-unlock__step {
+  margin-top: 8px;
+}
+
+.gongfa-item__wuxing-tag {
+  margin-top: 8px;
+  font-size: 12px;
+  color: $color-primary;
+}
+
+.gongfa-upgrade-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: $color-text;
+  background: rgba($color-primary, 0.15);
+  border: 1px solid $color-primary-dim;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba($color-primary, 0.25);
+  }
+}
+
+.gongfa-upgrade-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: $color-text-muted;
+  line-height: 1.5;
 }
 </style>

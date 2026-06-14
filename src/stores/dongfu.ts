@@ -6,6 +6,22 @@ import {
 } from '@/game/models/dongfu'
 import { applyLingqiRecovery } from '@/game/systems/lingqi'
 import { checkDongfuUpgrade, upgradeDongfu } from '@/game/systems/dongfu-upgrade'
+import {
+  checkZhenfaBlueprintUnlock,
+  checkZhenfaSetup,
+  setupZhenfa,
+  unlockZhenfaFromBlueprint,
+} from '@/game/systems/zhenfa-setup'
+import {
+  checkFabaoBlueprintUnlock,
+  checkFabaoCraft,
+  craftFabao,
+  unlockFabaoFromBlueprint,
+} from '@/game/systems/fabao-craft'
+import {
+  rechargeAllFabaosFromDongfu,
+  rechargeFabaoFromDongfu,
+} from '@/game/systems/fabao-recharge'
 import type { IdleState } from '@/game/types'
 import { createDefaultIdleState, loadSave } from '@/stores/save'
 import { usePlayerStore } from '@/stores/player'
@@ -44,8 +60,9 @@ export const useDongfuStore = defineStore('dongfu', {
       return state.idle.isRunning
     },
     /** 修炼状态文案 */
-    idleStatusText(): string {
-      return this.isCultivating ? '修炼中' : '未修炼'
+    idleStatusText(state): string {
+      if (!state.idle.isRunning) return '未修炼'
+      return state.idle.mode === 'gongfa' ? '功法修炼中' : '修为修炼中'
     },
   },
   actions: {
@@ -68,9 +85,10 @@ export const useDongfuStore = defineStore('dongfu', {
       const elapsed = Math.floor((now - this.dongfu.lastLingqiTickAt) / 1000)
       if (elapsed <= 0) return
 
-      const result = applyLingqiRecovery(this.dongfu, elapsed, false, now)
+      const playerStore = usePlayerStore()
+      const result = applyLingqiRecovery(this.dongfu, elapsed, false, now, playerStore.inventory)
       this.dongfu = result.dongfu
-      usePlayerStore().save()
+      playerStore.save()
     },
     /**
      * 暂停灵气恢复计时：先结算在线时段，再冻结锚点
@@ -104,6 +122,133 @@ export const useDongfuStore = defineStore('dongfu', {
 
       if (result.success && result.dongfu) {
         this.dongfu = result.dongfu
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 检测是否可参悟阵法图纸 */
+    checkZhenfaUnlock() {
+      const playerStore = usePlayerStore()
+      return checkZhenfaBlueprintUnlock(this.dongfu, playerStore.inventory)
+    },
+    /** 检测是否可布阵/升阵 */
+    checkZhenfaDeploy() {
+      const playerStore = usePlayerStore()
+      return checkZhenfaSetup(this.dongfu, playerStore.inventory)
+    },
+    /** 参悟阵法图纸 */
+    unlockZhenfaBlueprint(blueprintItemId?: string) {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法参悟图纸' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = unlockZhenfaFromBlueprint(this.dongfu, playerStore.inventory, blueprintItemId)
+
+      if (result.success && result.dongfu) {
+        this.dongfu = result.dongfu
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 布阵/升阵 */
+    deployZhenfa() {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法布阵' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = setupZhenfa(this.dongfu, playerStore.inventory)
+
+      if (result.success && result.dongfu) {
+        this.dongfu = result.dongfu
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 检测是否可参悟法器图纸 */
+    checkFabaoBlueprintUnlock(blueprintItemId: string) {
+      const playerStore = usePlayerStore()
+      return checkFabaoBlueprintUnlock(playerStore.fabao, playerStore.inventory, blueprintItemId)
+    },
+    /** 参悟法器图纸 */
+    unlockFabaoBlueprint(blueprintItemId: string) {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法参悟图纸' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = unlockFabaoFromBlueprint(
+        playerStore.fabao,
+        playerStore.inventory,
+        blueprintItemId,
+      )
+
+      if (result.success && result.fabaoState) {
+        playerStore.fabao = result.fabaoState
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 检测是否可炼制法器 */
+    checkFabaoCraft(templateId: string) {
+      const playerStore = usePlayerStore()
+      return checkFabaoCraft(this.dongfu, playerStore.fabao, playerStore.inventory, templateId)
+    },
+    /** 炼制法器 */
+    craftFabaoItem(templateId: string) {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法炼器' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = craftFabao(
+        this.dongfu,
+        playerStore.fabao,
+        playerStore.inventory,
+        templateId,
+      )
+
+      if (result.success && result.fabaoState) {
+        playerStore.fabao = result.fabaoState
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 为单个法器充能 */
+    rechargeFabaoItem(fabaoId: string) {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法充能' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = rechargeFabaoFromDongfu(this.dongfu, playerStore.fabao, fabaoId)
+
+      if (result.success && result.dongfu && result.fabaoState) {
+        this.dongfu = result.dongfu
+        playerStore.fabao = result.fabaoState
+        playerStore.save()
+      }
+
+      return result
+    },
+    /** 为全部法器充能 */
+    rechargeAllFabaos() {
+      if (this.idle.isRunning) {
+        return { success: false, message: '修炼期间无法充能' }
+      }
+
+      const playerStore = usePlayerStore()
+      const result = rechargeAllFabaosFromDongfu(this.dongfu, playerStore.fabao)
+
+      if (result.success && result.dongfu && result.fabaoState) {
+        this.dongfu = result.dongfu
+        playerStore.fabao = result.fabaoState
         playerStore.save()
       }
 

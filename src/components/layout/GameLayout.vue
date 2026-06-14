@@ -32,6 +32,7 @@ function startGameClocks() {
   worldTimeTimer = setInterval(() => {
     playerStore.tickWorldTime()
     dongfuStore.tickLingqiRecovery()
+    gameStore.tryAutoStartDongfuCultivation()
   }, WORLD_TIME_TICK_MS)
 }
 

@@ -17,13 +17,49 @@ import {
   getGongfaTemplate,
   type Gongfa,
 } from '@/game/models/gongfa'
+import { WUXING_SUMMARY_GONGFA_ID } from '@/game/constants/wuxing-summary'
+import {
+  buildWuxingSummaryProgressInfo,
+  buildWuxingSummaryUpgradeStatus,
+  isWuxingSummaryGongfaLocked,
+  settleWuxingSummaryOnLifeEnd,
+  tryMarkWuxingSummaryLifeStep,
+  upgradeWuxingSummaryQuality,
+} from '@/game/systems/wuxing-summary'
 import { buildEffectiveCombatStats } from '@/game/systems/stat-contributors'
 import type { SkillProficiencyLevelUpResult } from '@/game/formulas/skill-proficiency'
 import {
   addGongfaExp as applyGongfaExpGain,
   type GongfaLevelUpResult,
 } from '@/game/systems/gongfa'
-import { addSkillProficiencyBatch } from '@/game/systems/skill-proficiency'
+import {
+  addPlayerSkillProficiency,
+  buildBattleLoadoutDisplayItems,
+  buildPlayerBattleSkillLoadout,
+  buildPlayerSkillDisplayItems,
+  clonePlayerSkillState,
+  configureSkillLoadoutSlot,
+  migratePlayerSkillStateFromGongfaList,
+  syncLearnedSkillsFromGongfaList,
+  toggleEquippedSkill,
+  unequipSkillSlot,
+} from '@/game/systems/player-skill-library'
+import {
+  countEquippedSkills,
+  createDefaultPlayerSkillState,
+  toSkillSlotArrayIndex,
+  type PlayerSkillState,
+} from '@/game/models/player-skill'
+import {
+  createDefaultFabaoState,
+  type FabaoState,
+} from '@/game/models/fabao'
+import { buildFabaoDisplayItem } from '@/game/systems/fabao-combat'
+import { equipFabao, unequipFabao } from '@/game/systems/fabao-equip'
+import {
+  getSkillById,
+  getSkillLevelFromProficiency,
+} from '@/game/models/skill'
 import { REAL_MS_PER_GAME_DAY } from '@/game/constants/time'
 import {
   advanceWorldTime,
@@ -52,15 +88,25 @@ import {
 import {
   addItemToInventory,
   addLingshi,
-  useConsumableItem,
+  getTotalLingshi,
+  listNonemptyLingshi,
 } from '@/game/systems/inventory'
-import { buyFromMarket, buySpecialFromMarket, sellToMarket } from '@/game/systems/market'
+import { ELEMENT_COLORS } from '@/game/systems/spirit-root'
+import {
+  buyFromMarket,
+  buySpecialFromMarket,
+  sellAllSellableToMarket,
+  sellAllToMarket,
+  sellToMarket,
+} from '@/game/systems/market'
 import { createDefaultMarketState, type MarketState } from '@/game/models/market'
 import { tickMarketTreasureRefresh } from '@/game/systems/market-refresh'
 import { calcTotalGameDays } from '@/game/systems/time'
 import {
   checkAndUnlockAchievements,
+  syncUpgradeAchievements,
   unlockAchievementManually,
+  type AchievementLevelUpResult,
   type AchievementUnlockResult,
 } from '@/game/systems/achievement'
 import { equipTitle, getEquippedTitleName, unlockTitles } from '@/game/systems/title'
@@ -78,6 +124,7 @@ interface PlayerState {
   player: Player
   activeGongfaId: string
   gongfaList: Gongfa[]
+  playerSkills: PlayerSkillState
   worldTime: WorldTime
   monsterTierPity: MonsterTierPityState
   reincarnation: ReincarnationState
@@ -85,6 +132,7 @@ interface PlayerState {
   titles: TitleState
   inventory: InventoryState
   market: MarketState
+  fabao: FabaoState
 }
 
 function createInitialPlayerState(): PlayerState {
@@ -94,6 +142,7 @@ function createInitialPlayerState(): PlayerState {
       player: saved.player,
       activeGongfaId: saved.activeGongfaId,
       gongfaList: saved.gongfaList,
+      playerSkills: saved.playerSkills ?? createDefaultPlayerSkillState(),
       worldTime: saved.worldTime,
       monsterTierPity: saved.monsterTierPity ?? createDefaultMonsterTierPityState(),
       reincarnation: saved.reincarnation ?? createDefaultReincarnationState(),
@@ -101,6 +150,7 @@ function createInitialPlayerState(): PlayerState {
       titles: saved.titles ?? createDefaultTitleState(),
       inventory: saved.inventory ?? createDefaultInventory(),
       market: saved.market ?? createDefaultMarketState(),
+      fabao: saved.fabao ?? createDefaultFabaoState(),
     }
   }
   const defaults = createDefaultGameSave()
@@ -108,6 +158,7 @@ function createInitialPlayerState(): PlayerState {
     player: defaults.player,
     activeGongfaId: defaults.activeGongfaId,
     gongfaList: defaults.gongfaList,
+    playerSkills: defaults.playerSkills,
     worldTime: defaults.worldTime,
     monsterTierPity: defaults.monsterTierPity,
     reincarnation: defaults.reincarnation,
@@ -115,6 +166,7 @@ function createInitialPlayerState(): PlayerState {
     titles: defaults.titles,
     inventory: defaults.inventory,
     market: defaults.market,
+    fabao: defaults.fabao,
   }
 }
 
@@ -130,6 +182,11 @@ export const usePlayerStore = defineStore('player', {
     },
     activeGongfa(state): Gongfa | undefined {
       return state.gongfaList.find((g) => g.id === state.activeGongfaId)
+    },
+    /** 五行汇总功法解锁与升品进度 */
+    wuxingSummaryProgress(state) {
+      const activeGongfa = state.gongfaList.find((g) => g.id === state.activeGongfaId)
+      return buildWuxingSummaryProgressInfo(state.reincarnation, activeGongfa, state.gongfaList)
     },
     realmText(): string {
       return this.player.realm
@@ -152,6 +209,18 @@ export const usePlayerStore = defineStore('player', {
     /** 当前佩戴称号名称 */
     equippedTitleText(state): string | null {
       return getEquippedTitleName(state.titles)
+    },
+    /** 灵石总量 */
+    totalLingshi(state): number {
+      return getTotalLingshi(state.inventory.lingshi)
+    },
+    /** 五行灵石展示列表（仅含余额 > 0 的属性） */
+    lingshiDisplayItems(state) {
+      return listNonemptyLingshi(state.inventory.lingshi).map((entry) => ({
+        ...entry,
+        color: ELEMENT_COLORS[entry.element],
+        tagStyle: `color: ${ELEMENT_COLORS[entry.element]}; border-color: ${ELEMENT_COLORS[entry.element]};`,
+      }))
     },
     /** 当前境界修为进度（角色信息 / 状态栏共用） */
     xiuweiSummary(state) {
@@ -177,10 +246,32 @@ export const usePlayerStore = defineStore('player', {
           activeGongfa: state.gongfaList.find((g) => g.id === state.activeGongfaId),
           gongfaList: state.gongfaList,
           equippedTitleId: state.titles.equippedTitleId,
+          fabaoState: state.fabao,
         },
         undefined,
         state.reincarnation.combat,
+        state.achievements,
       )
+    },
+    /** 技能库展示项 */
+    skillLibraryItems(state) {
+      return buildPlayerSkillDisplayItems(state.playerSkills, state.gongfaList)
+    },
+    /** 已装配战斗技能数量 */
+    equippedSkillCount(state): number {
+      return countEquippedSkills(state.playerSkills.equippedSkillSlots)
+    },
+    /** 6 栏战斗配置展示（含法器预留位） */
+    battleLoadoutSlots(state) {
+      return buildBattleLoadoutDisplayItems(state.playerSkills, state.fabao)
+    },
+    /** 当前战斗技能装载（仅技能栏已配置项，无 fallback） */
+    battleSkillLoadout(state) {
+      return buildPlayerBattleSkillLoadout(state.playerSkills, state.gongfaList)
+    },
+    /** 法器展示列表 */
+    fabaoDisplayItems(state) {
+      return state.fabao.owned.map(buildFabaoDisplayItem)
     },
   },
   actions: {
@@ -200,8 +291,55 @@ export const usePlayerStore = defineStore('player', {
         titles: this.titles,
         inventory: this.inventory,
         market: this.market,
+        playerSkills: this.playerSkills,
+        fabao: this.fabao,
       }
       persistSave(data)
+    },
+    /** 构建战斗技能装载 */
+    buildBattleSkillLoadout() {
+      return buildPlayerBattleSkillLoadout(this.playerSkills, this.gongfaList)
+    },
+    /** 同步功法解锁到技能库 */
+    syncPlayerSkillsFromGongfa() {
+      syncLearnedSkillsFromGongfaList(this.playerSkills, this.gongfaList)
+    },
+    /** 切换技能战斗装配 */
+    toggleSkillEquip(skillId: string): { success: boolean; message: string } {
+      const nextState = clonePlayerSkillState(this.playerSkills)
+      const result = toggleEquippedSkill(nextState, skillId)
+      if (result.success) {
+        this.playerSkills = nextState
+        this.save()
+      }
+      return result
+    },
+    /** 清空指定技能栏 */
+    clearSkillLoadoutSlot(globalSlotIndex: number): { success: boolean; message: string } {
+      const skillSlotIndex = toSkillSlotArrayIndex(globalSlotIndex)
+      if (skillSlotIndex == null) {
+        return { success: false, message: '该栏位为法器位。' }
+      }
+      const nextState = clonePlayerSkillState(this.playerSkills)
+      const result = unequipSkillSlot(nextState, skillSlotIndex)
+      if (result.success) {
+        this.playerSkills = nextState
+        this.save()
+      }
+      return result
+    },
+    /** 将技能配置到指定栏位 */
+    assignSkillToLoadoutSlot(
+      globalSlotIndex: number,
+      skillId: string,
+    ): { success: boolean; message: string } {
+      const nextState = clonePlayerSkillState(this.playerSkills)
+      const result = configureSkillLoadoutSlot(nextState, globalSlotIndex, skillId)
+      if (result.success) {
+        this.playerSkills = nextState
+        this.save()
+      }
+      return result
     },
     /** 构建有效战斗属性（供内部切换功法等场景） */
     buildEffectiveCombatStats() {
@@ -211,9 +349,11 @@ export const usePlayerStore = defineStore('player', {
           activeGongfa: this.activeGongfa,
           gongfaList: this.gongfaList,
           equippedTitleId: this.titles.equippedTitleId,
+          fabaoState: this.fabao,
         },
         undefined,
         this.reincarnation.combat,
+        this.achievements,
       )
     },
     /** 成就检测上下文 */
@@ -262,6 +402,44 @@ export const usePlayerStore = defineStore('player', {
       this.save()
       return results
     },
+    /**
+     * 历练中逃跑失败后累计计数并同步升级类成就
+     * @param count 本回合失败次数
+     */
+    recordFleeFailures(count: number): AchievementLevelUpResult[] {
+      if (count <= 0) return []
+
+      this.achievements.counters.fleeFailures += count
+      const levelUps = syncUpgradeAchievements(
+        this.achievements,
+        this.buildAchievementContext(),
+      )
+
+      if (levelUps.length > 0) {
+        const oldEffective = this.effectiveCombatStats
+        const newEffective = this.buildEffectiveCombatStats()
+        const hpRatio = oldEffective.combat.maxHp > 0
+          ? this.player.combat.hp / oldEffective.combat.maxHp
+          : 1
+        const mpRatio = oldEffective.combat.maxMp > 0
+          ? this.player.combat.mp / oldEffective.combat.maxMp
+          : 1
+
+        this.player.combat.hp = Math.max(
+          1,
+          Math.min(newEffective.combat.maxHp, Math.floor(newEffective.combat.maxHp * hpRatio)),
+        )
+        this.player.combat.mp = Math.max(
+          0,
+          Math.min(newEffective.combat.maxMp, Math.floor(newEffective.combat.maxMp * mpRatio)),
+        )
+        this.save()
+      } else {
+        this.save()
+      }
+
+      return levelUps
+    },
     /** 佩戴或卸下称号 */
     setEquippedTitle(titleId: string | null) {
       const oldEffective = this.effectiveCombatStats
@@ -301,6 +479,7 @@ export const usePlayerStore = defineStore('player', {
 
       const cycle = Reincarnation.fromState(this.reincarnation)
       cycle.settlePreviousLife(this.player)
+      settleWuxingSummaryOnLifeEnd(cycle)
       this.reincarnation = cycle.toState()
 
       useDongfuStore().resetState()
@@ -502,28 +681,56 @@ export const usePlayerStore = defineStore('player', {
       this.save()
     },
     /**
-     * 为指定功法增加经验并触发界面更新
-     * @param gongfaId 功法 id
-     * @param expGain 经验增量
-     */
-    /**
-     * 批量增加技能熟练度（战斗回合结算）
+     * 批量增加技能熟练度（战斗回合结算，写入技能库并同步来源功法）
      */
     gainSkillProficiency(
-      gongfaId: string,
       gains: Array<{ skillId: string; amount: number }>,
     ): SkillProficiencyLevelUpResult[] {
-      const index = this.gongfaList.findIndex((g) => g.id === gongfaId)
-      if (index < 0 || gains.length === 0) return []
+      if (gains.length === 0) return []
 
-      const gongfa = this.gongfaList[index]
-      const results = addSkillProficiencyBatch(gongfa, gains)
-      const hasGain = gains.some((item) => item.amount > 0)
-      if (hasGain || results.length > 0) {
-        this.gongfaList[index] = {
-          ...gongfa,
-          skillProficiency: { ...gongfa.skillProficiency },
+      const results: SkillProficiencyLevelUpResult[] = []
+      const levelUps = new Map<string, ReturnType<typeof getSkillLevelFromProficiency>>()
+      let gongfaListChanged = false
+
+      for (const { skillId, amount } of gains) {
+        if (amount <= 0) continue
+
+        const record = this.playerSkills.learned[skillId]
+        const skill = getSkillById(skillId)
+        if (!record || !skill) continue
+
+        const sourceGongfa = this.gongfaList.find((g) => g.id === record.sourceGongfaId)
+        const quality = sourceGongfa?.quality ?? '凡品'
+        const previousProficiency = record.proficiency
+        const previousLevel = levelUps.get(skillId)
+          ?? getSkillLevelFromProficiency(previousProficiency, quality)
+
+        const updated = addPlayerSkillProficiency(
+          this.playerSkills,
+          this.gongfaList,
+          skillId,
+          amount,
+        )
+        if (!updated) continue
+
+        gongfaListChanged = true
+        const newLevel = getSkillLevelFromProficiency(updated.record.proficiency, quality)
+        if (newLevel !== previousLevel) {
+          levelUps.set(skillId, newLevel)
+          results.push({
+            skillId,
+            skillName: skill.name,
+            previousLevel,
+            newLevel,
+            proficiency: updated.record.proficiency,
+            message: `「${skill.name}」熟练度提升，达到${newLevel}！`,
+          })
         }
+      }
+
+      if (gongfaListChanged || results.length > 0) {
+        this.playerSkills = clonePlayerSkillState(this.playerSkills)
+        this.gongfaList = [...this.gongfaList]
         this.save()
       }
       return results
@@ -534,21 +741,91 @@ export const usePlayerStore = defineStore('player', {
 
       const gongfa = this.gongfaList[index]
       const result = applyGongfaExpGain(gongfa, expGain)
+      this.syncPlayerSkillsFromGongfa()
+      if (gongfa.level >= gongfa.maxLevel) {
+        const cycle = Reincarnation.fromState(this.reincarnation)
+        if (tryMarkWuxingSummaryLifeStep(gongfa, cycle)) {
+          this.reincarnation = cycle.toState()
+        }
+      }
       this.gongfaList[index] = { ...gongfa }
+      this.playerSkills = clonePlayerSkillState(this.playerSkills)
       this.processAchievementMilestones()
       this.save()
       return result
     },
     /**
-     * 历练掉落：尝试领悟新功法（已拥有则视为重复）
+     * 尝试领悟《五行归元诀》（解锁条件满足且未拥有时）
      */
+    tryGrantWuxingSummaryGongfa(): { granted: boolean; message: string } {
+      if (!this.reincarnation.wuxingSummaryUnlocked) {
+        return { granted: false, message: '尚未完成五世相生修炼。' }
+      }
+      if (this.gongfaList.some((g) => g.id === WUXING_SUMMARY_GONGFA_ID)) {
+        return { granted: false, message: '已领悟《五行归元诀》。' }
+      }
+
+      const gongfa = createGongfaFromTemplate(WUXING_SUMMARY_GONGFA_ID)
+      this.gongfaList.push(gongfa)
+      this.processAchievementMilestones()
+      this.save()
+      return { granted: true, message: '领悟功法「五行归元诀」！' }
+    },
+    /**
+     * 五行汇总功法升品阶
+     */
+    upgradeWuxingSummaryGongfa(gongfaId: string): { success: boolean; message: string } {
+      const index = this.gongfaList.findIndex((g) => g.id === gongfaId)
+      if (index < 0) {
+        return { success: false, message: '未找到该功法。' }
+      }
+
+      const gongfa = this.gongfaList[index]
+      const result = upgradeWuxingSummaryQuality(gongfa, this.gongfaList)
+      if (result.success) {
+        this.gongfaList[index] = { ...gongfa }
+        if (this.activeGongfaId === gongfaId) {
+          const oldEffective = this.effectiveCombatStats
+          const newEffective = this.buildEffectiveCombatStats()
+          const hpRatio = oldEffective.combat.maxHp > 0
+            ? this.player.combat.hp / oldEffective.combat.maxHp
+            : 1
+          const mpRatio = oldEffective.combat.maxMp > 0
+            ? this.player.combat.mp / oldEffective.combat.maxMp
+            : 1
+          this.player.combat.hp = Math.max(
+            1,
+            Math.min(newEffective.combat.maxHp, Math.floor(newEffective.combat.maxHp * hpRatio)),
+          )
+          this.player.combat.mp = Math.max(
+            0,
+            Math.min(newEffective.combat.maxMp, Math.floor(newEffective.combat.maxMp * mpRatio)),
+          )
+        }
+        this.save()
+      }
+      return result
+    },
+    /**
+     * 获取五行归元诀升品阶状态
+     */
+    getWuxingSummaryUpgradeStatus(gongfaId: string) {
+      const gongfa = this.gongfaList.find((item) => item.id === gongfaId)
+      if (!gongfa) return null
+      return buildWuxingSummaryUpgradeStatus(gongfa, this.gongfaList)
+    },
     tryObtainGongfa(templateId: string): {
       obtained: boolean
       gongfaName: string
       duplicate: boolean
+      locked?: boolean
     } {
       const template = getGongfaTemplate(templateId)
       const gongfaName = template?.name ?? '未知功法'
+
+      if (isWuxingSummaryGongfaLocked(templateId, this.reincarnation)) {
+        return { obtained: false, gongfaName, duplicate: false, locked: true }
+      }
 
       if (this.gongfaList.some((g) => g.id === templateId)) {
         return { obtained: false, gongfaName, duplicate: true }
@@ -556,6 +833,8 @@ export const usePlayerStore = defineStore('player', {
 
       const gongfa = createGongfaFromTemplate(templateId)
       this.gongfaList.push(gongfa)
+      this.syncPlayerSkillsFromGongfa()
+      this.playerSkills = clonePlayerSkillState(this.playerSkills)
       this.processAchievementMilestones()
       this.save()
       return { obtained: true, gongfaName, duplicate: false }
@@ -589,6 +868,9 @@ export const usePlayerStore = defineStore('player', {
       this.market = createDefaultMarketState()
       useDongfuStore().resetState()
       this.processAchievementMilestones('ach_first_step')
+      this.tryGrantWuxingSummaryGongfa()
+      this.playerSkills = migratePlayerSkillStateFromGongfaList(this.gongfaList)
+      this.save()
     },
     /**
      * 再入轮回：保留多世加成，重新创建角色
@@ -623,6 +905,13 @@ export const usePlayerStore = defineStore('player', {
       this.market = createDefaultMarketState()
       useDongfuStore().resetState()
       this.restoreFullResources()
+      const grantResult = this.tryGrantWuxingSummaryGongfa()
+      if (grantResult.granted) {
+        void import('@/stores/game').then(({ useGameStore }) => {
+          useGameStore().lastMessage = grantResult.message
+        })
+      }
+      this.playerSkills = migratePlayerSkillStateFromGongfaList(this.gongfaList)
       this.save()
     },
     /** 向背包添加物品 */
@@ -633,25 +922,33 @@ export const usePlayerStore = defineStore('player', {
       }
       return result
     },
-    /** 获得灵石 */
-    gainLingshi(amount: number) {
-      const gained = addLingshi(this.inventory, amount)
+    /** 获得指定属性的灵石 */
+    gainLingshi(amount: number, element: ElementType) {
+      const gained = addLingshi(this.inventory, amount, element)
       if (gained > 0) {
         this.save()
       }
       return gained
     },
-    /** 使用消耗品 */
-    useItem(itemId: string) {
-      const { combat } = this.effectiveCombatStats
-      const result = useConsumableItem(
-        this.inventory,
-        this.player,
-        itemId,
-        combat.maxHp,
-        combat.maxMp,
-      )
-      if (result.success) {
+    /** 同步法器状态（战斗后灵力消耗等） */
+    syncFabaoState(fabaoState: FabaoState) {
+      this.fabao = { ...fabaoState, owned: [...fabaoState.owned] }
+      this.save()
+    },
+    /** 装备法器 */
+    equipFabaoItem(fabaoId: string) {
+      const result = equipFabao(this.fabao, fabaoId)
+      if (result.success && result.fabaoState) {
+        this.fabao = result.fabaoState
+        this.save()
+      }
+      return result
+    },
+    /** 卸下法器 */
+    unequipFabaoItem(type: '攻击' | '防御') {
+      const result = unequipFabao(this.fabao, type)
+      if (result.success && result.fabaoState) {
+        this.fabao = result.fabaoState
         this.save()
       }
       return result
@@ -677,6 +974,22 @@ export const usePlayerStore = defineStore('player', {
       }
       return result
     },
+    /** 坊市出售该物品全部数量 */
+    sellAllInventoryItem(itemId: string) {
+      const result = sellAllToMarket(this.inventory, itemId)
+      if (result.success) {
+        this.save()
+      }
+      return result
+    },
+    /** 坊市批量出售全部可售物品 */
+    sellAllSellableInventoryItems() {
+      const result = sellAllSellableToMarket(this.inventory)
+      if (result.success) {
+        this.save()
+      }
+      return result
+    },
     /** 重置存档 */
     resetSave() {
       localStorage.removeItem(SAVE_KEY)
@@ -691,6 +1004,8 @@ export const usePlayerStore = defineStore('player', {
       this.titles = createDefaultTitleState()
       this.inventory = createDefaultInventory()
       this.market = createDefaultMarketState()
+      this.playerSkills = migratePlayerSkillStateFromGongfaList([starter])
+      this.fabao = createDefaultFabaoState()
       useDongfuStore().resetState()
     },
   },

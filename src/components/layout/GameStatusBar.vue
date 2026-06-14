@@ -16,7 +16,8 @@ const summary = computed(() => ({
 
 const ageText = computed(() => `${playerStore.player.age} 岁`)
 const dateText = computed(() => playerStore.gameDateText)
-const lingshiText = computed(() => String(playerStore.inventory.lingshi))
+const lingshiText = computed(() => String(playerStore.totalLingshi))
+const lingshiItems = computed(() => playerStore.lingshiDisplayItems)
 </script>
 
 <template>
@@ -185,5 +186,25 @@ const lingshiText = computed(() => String(playerStore.inventory.lingshi))
 
 .game-status-bar__meta-value--date {
   font-size: 11px;
+}
+
+.game-status-bar__lingshi-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.game-status-bar__lingshi-tag {
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.game-status-bar__lingshi-tag + .game-status-bar__lingshi-tag {
+  margin-left: 4px;
 }
 </style>

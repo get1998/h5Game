@@ -1,5 +1,6 @@
 import type { CombatSnapshot } from '@/game/formulas/combat-snapshot'
-import { getGongfaPrimaryElement, type Gongfa } from '@/game/models/gongfa'
+import { getGongfaPrimaryElement, isWuxingSummaryGongfa, type Gongfa } from '@/game/models/gongfa'
+import type { AchievementState } from '@/game/models/achievement'
 import type { ReincarnationCombatBonus } from '@/game/models/reincarnation'
 import type { CombatStats, Player } from '@/game/models/player'
 import type { ElementType } from '@/game/types'
@@ -16,11 +17,11 @@ import type {
 } from '@/game/systems/stat-contributors/types'
 
 function buildSnapshotFromCombat(
-  player: Player,
   combat: CombatStats,
   primaryAttackElement: ElementType,
   tenacity: number,
   damageReduction: number,
+  immuneToElementCounter: boolean,
 ): CombatSnapshot {
   return {
     attack: combat.attack,
@@ -32,8 +33,9 @@ function buildSnapshotFromCombat(
     penetration: combat.penetration,
     tenacity,
     damageReduction,
-    defenseElement: player.spiritRootElements[0] ?? primaryAttackElement,
+    defenseElement: primaryAttackElement,
     primaryAttackElement,
+    immuneToElementCounter,
   }
 }
 
@@ -55,28 +57,33 @@ export function buildEffectiveCombatStats(
   loadout: BattleLoadout,
   contributors?: StatContributor[],
   reincarnationCombat?: ReincarnationCombatBonus | null,
+  achievements?: AchievementState,
 ): EffectiveCombatStats {
   const context: StatContributorContext = {
     player,
     loadout,
     reincarnationCombat,
+    achievements,
   }
   const realmBase: CombatStats = { ...player.combat }
   const { merged, byContributor } = aggregateContributions(context, contributors)
   const combat = applyCombatContributions(realmBase, merged)
 
   const primaryAttackElement = resolvePrimaryAttackElement(player, loadout)
+  const immuneToElementCounter = loadout.activeGongfa
+    ? isWuxingSummaryGongfa(loadout.activeGongfa)
+    : false
   const tenacity = Math.max(0, merged.tenacity)
   const damageReduction = Math.min(0.9, Math.max(0, merged.damageReduction))
 
   return {
     combat,
     snapshot: buildSnapshotFromCombat(
-      player,
       combat,
       primaryAttackElement,
       tenacity,
       damageReduction,
+      immuneToElementCounter,
     ),
     breakdown: buildCombatStatBreakdown(player, byContributor),
     tenacity,

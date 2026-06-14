@@ -163,3 +163,18 @@ export function applyGongfaSkillDamageFloor(
   }
   return GONGFA_SKILL_MIN_EFFECTIVE_MULTIPLIER / elementMultiplier
 }
+
+/** 自动逃跑基础成功率（双方速度相同时） */
+export const FLEE_BASE_SUCCESS_RATE = 0.5
+
+/** 速度差每点折算的逃跑率变化（与命中率一致：0.1%/点） */
+export const FLEE_SPEED_FACTOR = 0.001
+
+/** 逃跑成功率下限 */
+export const FLEE_MIN_SUCCESS_RATE = 0.1
+
+/** 逃跑成功率上限 */
+export const FLEE_MAX_SUCCESS_RATE = 0.95
+
+/** 敌方战斗力 ≥ 己方 × 该倍数时，直接撤离（不掷骰） */
+export const COMBAT_POWER_FORCE_FLEE_RATIO = 2.2

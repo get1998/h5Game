@@ -131,6 +131,7 @@ const QI_EARLY_GONGFA_DROPS: MapGongfaDrop[] = [
 const QI_EARLY_ITEM_DROPS: MapItemDrop[] = [
   { type: 'item', itemId: 'item_julingcao', rate: 0.12 },
   { type: 'item', itemId: 'item_lingshi_suipian', rate: 0.08, count: 2 },
+  { type: 'item', itemId: 'item_yaodan_canque', rate: 0.04 },
 ]
 
 /** 炼气中后期物品掉落 */

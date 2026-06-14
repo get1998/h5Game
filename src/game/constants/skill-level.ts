@@ -11,7 +11,7 @@ export const SKILL_LEVEL_COEFFICIENT: Record<SkillLevel, number> = {
   入门: 0.95,
   小成: 1.2,
   大成: 1.5,
-  圆满: 2.0,
+  圆满: 2.2,
 }
 
 /**
@@ -38,10 +38,13 @@ export const SKILL_PROFICIENCY_RANK_MULTIPLIER: Record<GongfaQuality, number> = 
 }
 
 /** 单次施展技能的基础熟练度增量（再乘境界差倍率） */
-export const SKILL_PROFICIENCY_BASE_GAIN = 2
+export const SKILL_PROFICIENCY_BASE_GAIN = 4
 
 /** 单次施展技能至少获得的熟练度（含越级碾压低境界怪） */
-export const SKILL_PROFICIENCY_MIN_GAIN = 1
+export const SKILL_PROFICIENCY_MIN_GAIN = 2
+
+/** 以技能击杀怪物时，额外熟练度 = 单次施展增量 × 该比例 */
+export const SKILL_KILL_PROFICIENCY_BONUS_RATIO = 1.5
 
 /**
  * 境界差熟练度倍率（怪物境界 − 玩家境界，单位：小境界）

@@ -13,9 +13,9 @@ export const DONGFU_TREASURE_DROP_REALM_OFFSET = 3
 /** 怪物品阶对洞府宝物掉落率（独立掷骰） */
 export const DONGFU_TREASURE_TIER_DROP_RATE: Record<MonsterTier, number> = {
   普通: 0.015,
-  精英: 0.05,
-  首领: 0.12,
-  传奇: 0.28,
+  精英: 0.08,
+  首领: 0.18,
+  传奇: 0.38,
 }
 
 /** 坊市每日刷新洞府宝物的概率（每种候选独立掷骰） */

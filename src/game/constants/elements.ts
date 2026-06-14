@@ -75,15 +75,19 @@ export function getCombatElementRelation(
  * 计算战斗五行伤害倍率
  * @param attackElement 攻击属性，缺省视为无属性加成
  * @param defenseElement 目标属性，缺省视为无属性加成
+ * @param options.defenderImmuneToCounter 受击方免疫被克（五行汇总功法）
  */
 export function getCombatElementMultiplier(
   attackElement: ElementType | undefined,
   defenseElement: ElementType | undefined,
+  options?: { defenderImmuneToCounter?: boolean },
 ): number {
   if (!attackElement || !defenseElement) return 1
   const relation = getCombatElementRelation(attackElement, defenseElement)
   if (relation === 'counter') return COMBAT_ELEMENT_COUNTER_MULTIPLIER
-  if (relation === 'countered') return COMBAT_ELEMENT_COUNTERED_MULTIPLIER
+  if (relation === 'countered') {
+    return options?.defenderImmuneToCounter ? 1 : COMBAT_ELEMENT_COUNTERED_MULTIPLIER
+  }
   return 1
 }
 
@@ -93,10 +97,15 @@ export function getCombatElementMultiplier(
 export function formatCombatElementHint(
   attackElement: ElementType,
   defenseElement: ElementType,
+  options?: { defenderImmuneToCounter?: boolean },
 ): string | null {
   const relation = getCombatElementRelation(attackElement, defenseElement)
   if (relation === 'counter') return `${attackElement}克${defenseElement}`
-  if (relation === 'countered') return `${attackElement}被${defenseElement}克`
+  if (relation === 'countered') {
+    return options?.defenderImmuneToCounter
+      ? `${attackElement}被${defenseElement}克·归元免疫`
+      : `${attackElement}被${defenseElement}克`
+  }
   return null
 }
 

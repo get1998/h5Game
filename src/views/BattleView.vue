@@ -2,7 +2,9 @@
 import { computed } from 'vue'
 import GameLayout from '@/components/layout/GameLayout.vue'
 import LogPanel from '@/components/LogPanel.vue'
+import MapCanvas from '@/components/MapCanvas/index.vue'
 import { TRAINING_MAPS } from '@/game/constants/maps'
+import { getMonsterCombatElement } from '@/game/models/monster'
 import { useGameStore } from '@/stores/game'
 import { usePlayerStore } from '@/stores/player'
 
@@ -20,11 +22,16 @@ const mapList = computed(() =>
       requiredRealm: map.requiredRealm,
       unlocked,
       selected,
-      itemClass: selected ? 'map-item map-item--active' : 'map-item',
-      lockText: unlocked ? '' : `需 ${map.requiredRealm}`,
     }
   }),
 )
+
+/** 当前选中地图详情（Canvas 下方展示） */
+const selectedMapDetail = computed(() => {
+  const id = gameStore.selectedMapId
+  if (!id) return null
+  return mapList.value.find((item) => item.id === id) ?? null
+})
 
 const battleInfo = computed(() => {
   const monster = gameStore.currentMonster
@@ -49,7 +56,7 @@ const battleInfo = computed(() => {
     hasMonster: true,
     monsterName: monster.name,
     monsterKind: monster.kind,
-    monsterElement: monster.element,
+    monsterElement: getMonsterCombatElement(monster),
     tier: monster.tier,
     status: monster.status,
     statusHint: monster.status !== '普通'
@@ -99,6 +106,12 @@ const skillLogs = computed(() =>
   gameStore.battleLogs.filter((log) => log.type === 'skill'),
 )
 
+/** 战斗 / 技能日志 Tab 配置 */
+const logTabs = computed(() => [
+  { id: 'combat', label: '战斗日志', logs: combatLogs.value },
+  { id: 'skill', label: '技能等级', logs: skillLogs.value },
+])
+
 /** 调息、重伤或修炼期间禁止历练操作 */
 const isExploreLocked = computed(() =>
   gameStore.isRecoveryLocked || gameStore.isCultivationLocked,
@@ -109,6 +122,7 @@ const isExploreLocked = computed(() =>
  */
 function handleSelectMap(mapId: string) {
   if (isExploreLocked.value) return
+  if (!gameStore.canEnterMap(mapId)) return
   gameStore.selectMap(mapId)
 }
 
@@ -133,23 +147,23 @@ function handleToggleExplore() {
 
     <section class="map-card game-card">
       <div class="page-section-title">历练地图</div>
-      <p class="map-hint">选择地图后进入，将自动遇怪并自动战斗。</p>
-      <div class="map-list">
-        <button
-          v-for="item in mapList"
-          :key="item.id"
-          type="button"
-          :class="item.itemClass"
-          :disabled="!item.unlocked || gameStore.isAutoExploring || isExploreLocked"
-          @click="handleSelectMap(item.id)"
-        >
-          <div class="map-item__head">
-            <span class="map-item__name">{{ item.name }}</span>
-            <span v-if="!item.unlocked" class="map-item__lock">{{ item.lockText }}</span>
-          </div>
-          <p class="map-item__desc">{{ item.description }}</p>
-        </button>
+      <p class="map-hint">点击节点选择地图，进入后将自动遇怪并自动战斗。</p>
+      <MapCanvas
+        :nodes="mapList"
+        :selected-id="gameStore.selectedMapId"
+        :interaction-disabled="gameStore.isAutoExploring || isExploreLocked"
+        @select="handleSelectMap"
+      />
+      <div v-if="selectedMapDetail" class="map-detail">
+        <div class="map-detail__head">
+          <span class="map-detail__name">{{ selectedMapDetail.name }}</span>
+          <span v-if="!selectedMapDetail.unlocked" class="map-detail__lock">
+            需 {{ selectedMapDetail.requiredRealm }}
+          </span>
+        </div>
+        <p class="map-detail__desc">{{ selectedMapDetail.description }}</p>
       </div>
+      <p v-else class="map-detail-empty">请点击地图节点选择历练地点</p>
     </section>
 
     <!-- <BattleCanvas /> -->
@@ -224,8 +238,7 @@ function handleToggleExplore() {
     </section>
 
     <section class="battle-log-section">
-      <LogPanel :logs="combatLogs" title="战斗日志" />
-      <LogPanel :logs="skillLogs" title="技能等级" class="battle-skill-log" />
+      <LogPanel :tabs="logTabs" default-tab="combat" />
     </section>
   </GameLayout>
 </template>
@@ -247,62 +260,42 @@ function handleToggleExplore() {
   margin-bottom: 12px;
 }
 
-.map-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.map-item + .map-item {
-  margin-top: 10px;
-}
-
-.map-item {
-  display: block;
-  width: 100%;
-  text-align: left;
+.map-detail {
+  margin-top: 12px;
   padding: 12px;
   border-radius: $radius-sm;
   border: 1px solid $color-border;
   background: $color-bg-elevated;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  &:not(:disabled):active {
-    transform: scale(0.99);
-  }
 }
 
-.map-item--active {
-  border-color: $color-primary;
-  background: rgba($color-primary, 0.08);
-}
-
-.map-item__head {
+.map-detail__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.map-item__name {
+.map-detail__name {
   font-weight: 600;
   color: $color-text;
 }
 
-.map-item__lock {
+.map-detail__lock {
   font-size: 12px;
   color: $color-danger;
 }
 
-.map-item__desc {
+.map-detail__desc {
   margin-top: 6px;
   font-size: 12px;
   color: $color-text-muted;
   line-height: 1.4;
+}
+
+.map-detail-empty {
+  margin-top: 12px;
+  font-size: 13px;
+  color: $color-text-muted;
+  text-align: center;
 }
 
 .battle-card {
@@ -364,9 +357,5 @@ function handleToggleExplore() {
 
 .battle-log-section {
   margin-top: 16px;
-}
-
-.battle-skill-log {
-  margin-top: 12px;
 }
 </style>
